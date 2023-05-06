@@ -1,5 +1,1 @@
-dep(core image tensorflow.tensorflowlite)
-
-if(NOT WIN32)
-    dep(pthread)
-endif()
+dep(ion.core ion.audio ion.image tensorflow.tensorflowlite)

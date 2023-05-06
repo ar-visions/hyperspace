@@ -2,16 +2,21 @@
 #include <ai/gen.hpp>
 #include <media/image.hpp>
 
-
-int main(int argc, cchar_t* argv[]) {
-    auto def  = Map {{"image", "str"}};
-    auto args = var::args(argc, argv, def);
+/// simple inference test of model on image (resamples in ai if needed)
+int main(int ac, cchar_t* av[]) {
+    map<mx> def = map<mx> {
+        {"model", str("")},
+        {"image", str("")}
+    };
     ///
-    if (args.size() == 0)
-        std::cerr << "ai <tflite model>\n";
+    mx       ar = map<mx>::args(ac, av, def);
+    image    im = path_t(ar["image"]);
+    AI       ai = path_t(ar["model"]);
     ///
-    auto   im = Image { args["image"], Image::Format::Rgba };
-    auto   ai = AI    { args["model"] };
-    auto   in = ai({ im });
+    console.test(img, "no-image");
+    console.test(ai,  "no-model")
+    ///
+    array<float> inf = ai({ im }); // inf, inference. infinite possibilities kind of
+    console.log("inference: {0}", { inf });
     return 0;
 }
