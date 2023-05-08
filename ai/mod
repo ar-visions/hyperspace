@@ -1,1 +1,1 @@
-dep(ion.core ion.audio ion.image tensorflow.tensorflowlite)
+dep(ion.core ion.async ion.net ion.audio ion.image ion.ux tensorflow.tensorflow-lite)

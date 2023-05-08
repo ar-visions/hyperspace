@@ -1,4 +1,5 @@
 #pragma once
+#include <core/core.hpp>
 
 /// two valid meanings inferred
 struct AInternal;
@@ -7,10 +8,12 @@ struct AI:mx {
 protected:
     AInternal *i;
 public:
-    ptr(AI, mx, AInternal, i);
+    ptr_decl(AI, mx, AInternal, i);
     AI(path_t p);
     array<float> operator()(array<mx> v);
 };
+
+#if 0
 
 struct DataW {
     path_t      p;
@@ -23,7 +26,7 @@ struct Truth {
     array<var>    data;
     ///
     Truth(std::nullptr_t n = nullptr) { }
-    operator bool()  { return data and label.size(); }
+    operator bool()  { return data and label.len(); }
     bool operator!() { return !(operator bool()); }
 };
 
@@ -34,9 +37,6 @@ struct Dataset {
     str         dataset;
     float       w;
     ///
-    operator var()  {
-        return array<var> { var(path.string()), var(dataset), var(w) };
-    }
     void import(path_t root, str d) {
         auto sp = d.split(":");
         path    = var::format("{0}/{1}", {root.string(), sp[0]});
@@ -67,3 +67,5 @@ void Gen(Map            &args,
 
 Truths if_image(var &data, type_t format, lambda<Truths(Image &)> fn);
 Truths if_audio(var &data, lambda<Truths(Audio &)> fn);
+
+#endif

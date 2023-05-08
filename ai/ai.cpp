@@ -16,6 +16,8 @@ struct AInternal {
     std::unique_ptr<tflite::Interpreter>     itr;
 };
 
+ptr_impl(AI, mx, AInternal, i);
+
 /// construct AI model from path
 AI::AI(path_t p) : AI() {
     i = new AInternal { };
@@ -30,7 +32,7 @@ AI::AI(path_t p) : AI() {
 
 /// forward pass data
 array<r32> AI::operator()(array<mx> in) {
-    assert(in.size());
+    assert(in.len());
     assert(in[0].type() == typeof(image));
 
     /// interface w tflite::Interpreter
@@ -40,8 +42,8 @@ array<r32> AI::operator()(array<mx> in) {
     for (size_t d = 0; d < in.len(); d++) {
         mx &dd = in[d];
         (dd.type() == typeof(float) ?
-            memcpy(dd.data<r32>(), itr->typed_input_tensor<r32>(d), *dd.shape() * sizeof(r32)) :
-            memcpy(dd.data<u8> (), itr->typed_input_tensor<u8> (d), *dd.shape()));
+            memcpy(dd.data<r32>(), itr->typed_input_tensor<r32>(int(d)), *dd.shape() * sizeof(r32)) :
+            memcpy(dd.data<u8> (), itr->typed_input_tensor<u8> (int(d)), *dd.shape()));
     }
     
     /// run model, return output values as a vector of floats
