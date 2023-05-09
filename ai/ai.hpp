@@ -1,6 +1,7 @@
 #pragma once
 #include <core/core.hpp>
 
+namespace ion {
 /// two valid meanings inferred
 struct AInternal;
 
@@ -69,3 +70,4 @@ Truths if_image(var &data, type_t format, lambda<Truths(Image &)> fn);
 Truths if_audio(var &data, lambda<Truths(Audio &)> fn);
 
 #endif
+}

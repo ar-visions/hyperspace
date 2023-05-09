@@ -2,6 +2,8 @@
 #include <ai/gen.hpp>
 #include <media/image.hpp>
 
+using namespace ion;
+
 /// simple inference test of model on image (resamples in ai if needed)
 int main(int ac, cchar_t* av[]) {
     map<mx> def = map<mx> {

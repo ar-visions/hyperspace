@@ -10,6 +10,8 @@
 #include <tensorflow/lite/kernels/register.h>
 #include <tensorflow/lite/model.h>
 
+namespace ion {
+
 /// internal struct contains tflite resources, isolated here
 struct AInternal {
     std::unique_ptr<tflite::FlatBufferModel> mdl;
@@ -58,7 +60,6 @@ array<r32> AI::operator()(array<mx> in) {
 }
 
 #if 0
-
 void first_data(str model, Truth &schema, array<std::ofstream *> &odata, std::ofstream *& olabels) {
     str index = fmt { "gen/{0}/index.json", { model } };
     std::ofstream o_index(index.cs());
@@ -232,3 +233,4 @@ Truths if_audio(var &data, std::function<Truths(Audio &)> fn) {
 }
 
 #endif
+}
