@@ -10,29 +10,22 @@ using namespace ion;
 /// ----------------------------
 int main() {
     lambda<memory*(memory*)> mtest;
-    
+    int test = 1;
     ///
-    mtest = lambda<memory*(memory*)>([](memory* in) -> memory* {
-        return in;
-    });
-    
-    ///
-    lambda<mx(size_t)> fn = [](size_t s) -> mx {
-        return int(5) + int(s);
-    };
-    
-    ///
-    i32  abc         = i32(fn(1));
-    bool fn_test     = !fn;
     str  api_key     = "AIzaSyAg4nh93xKESkGZvv7Ocv2PBBFAM1jyDSs";
     str  channel_id  = "UCpVm7bg6pXKo1Pr6k5kxG9A";
     uri  request_url = fmt { "https://www.googleapis.com/youtube/v3/search?part=snippet&channelId={0}&maxResults=1&key={1}", { channel_id, api_key }};
-    
-    console.log("url = {0}", { request_url });
-    
     ///
     request(request_url, null).then([](mx result) {
-        console.log("got a result");
+        message::members &rs_0 = result.ref<message::members>();
+        //struct members {
+        //    uri     query;
+        //    mx      code = int(0);
+        //    map<mx> headers;
+        //    mx      content; /// best to store as mx, so we can convert directly in lambda arg, functionally its nice to have delim access in var.
+        //} &m;
+        console.log("code: {0}", {rs_0.code, rs_0.headers});
+        printf("abc\n");
     });
     
     ///
