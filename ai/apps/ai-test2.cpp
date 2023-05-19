@@ -12,13 +12,6 @@ using namespace ion;
 /// ------------------------------------------------------------
 
 int main() {
-    
-    /// load opus file (ogg
-    /// sample opus file in ogg container
-    audio aud { "audio/worf.wav", false };
-    
-    bool success     = aud.convert("audio/worf.opus");
-    
     str  api_key     = "AIzaSyAg4nh93xKESkGZvv7Ocv2PBBFAM1jyDSs";
     str  channel_id  = "UCpVm7bg6pXKo1Pr6k5kxG9A";
     uri  request_url = fmt { "https://www.googleapis.com/youtube/v3/search?part=snippet&channelId={0}&maxResults=1&key={1}", { channel_id, api_key }};
