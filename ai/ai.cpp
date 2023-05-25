@@ -1,8 +1,7 @@
 #include <core/core.hpp>
 #include <async/async.hpp>
-#include <audio/audio.hpp>
 #include <math/math.hpp>
-#include <image/image.hpp>
+#include <media/media.hpp>
 #include <ai/ai.hpp>
 ///
 #include "flatbuffers/flatbuffers.h"

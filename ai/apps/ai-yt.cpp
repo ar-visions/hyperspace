@@ -2,8 +2,7 @@
 #include <async/async.hpp>
 #include <net/net.hpp>
 #include <math/math.hpp>
-#include <image/image.hpp>
-#include <audio/audio.hpp>
+#include <media/media.hpp>
 
 using namespace ion;
 

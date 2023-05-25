@@ -1,6 +1,6 @@
 #include <ai/ai.hpp>
 #include <ai/gen.hpp>
-#include <media/image.hpp>
+#include <media/media.hpp>
 
 using namespace ion;
 
