@@ -1,15 +1,13 @@
 #pragma once
-#include <core/core.hpp>
+#include <mx/mx.hpp>
 
 namespace ion {
 /// two valid meanings inferred
 struct AInternal;
 
 struct AI:mx {
-protected:
-    AInternal *i;
-public:
-    ptr_decl(AI, mx, AInternal, i);
+    using intern = AInternal;
+    ptr_declare(AI);
     AI(path_t p);
     array<float> operator()(array<mx> v);
 };
