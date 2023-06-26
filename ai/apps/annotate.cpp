@@ -15,34 +15,29 @@ struct annotate:node {
     struct props {
         int sample;
         callback handler;
-    } &m;
-    
-    ///
-    ctr_args(annotate, node, props, m);
-    
-    ///
-    doubly<prop> meta() {
-        return {
-            prop { m, "sample",  m.sample },
-            prop { m, "handler", m.handler}
-        };
-    }
-    
-    ///
+        ///
+        doubly<prop> meta() {
+            return {
+                prop { "sample",  sample },
+                prop { "handler", handler}
+            };
+        }
+    };
+
+    component(annotate, node, props);
+
     void mounting() {
         console.log("mounting");
     }
 
-    /// if no render is defined, the content is used for embedding children from content (if its there)
-    /// if there is a render the content can be used within it
     Element render() {
         return button {
-            { "content", fmt {"hello world: {0}", { m.sample }} },
+            { "content", fmt {"hello world: {0}", { state->sample }} },
             { "on-click",
                 callback([&](event e) {
                     console.log("on-click...");
-                    if (m.handler)
-                        m.handler(e);
+                    if (state->handler)
+                        state->handler(e);
                 })
             }
         };
