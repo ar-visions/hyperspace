@@ -1,1 +1,1 @@
-dep(ion:mx ion:async ion:net ion:media ion:ux tensorflow:tensorflow-lite)
+dep(mx:mx mx:async ion:net ion:media ion:ux tensorflow:tensorflow-lite)
