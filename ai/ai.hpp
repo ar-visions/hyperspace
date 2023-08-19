@@ -24,7 +24,7 @@ struct Truth {
     array<float>  label;
     array<var>    data;
     ///
-    Truth(std::nullptr_t n = nullptr) { }
+    Truth(null_t n = nullptr) { }
     operator bool()  { return data and label.len(); }
     bool operator!() { return !(operator bool()); }
 };
