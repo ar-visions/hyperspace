@@ -11,7 +11,7 @@ using namespace ion;
 /// audio annotation app first
 /// ------------------------------------------------------------
 
-struct annotate:node {
+struct annotate:Element {
     struct props {
         int sample;
         callback handler;
@@ -24,7 +24,7 @@ struct annotate:node {
         }
     };
 
-    component(annotate, node, props);
+    component(annotate, Element, props);
 
     void mounting() {
         console.log("mounting");
