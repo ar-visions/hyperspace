@@ -6,11 +6,27 @@
     "configurations": [
         {
             "name": "vision annotate",
-            "type": "python",
+            "type": "cppdbg",
             "request": "launch",
-            "program": "${workspaceFolder}/../hyperspace/vision/apps/annotate.py",
-            "console": "integratedTerminal",
-            "justMyCode": true
-        }
+            "program": "${workspaceFolder}/../hyperspace/build/annotate",
+            "args": [],
+            "stopAtEntry": false,
+            "cwd": "${workspaceFolder}/../hyperspace/build",
+            "environment": [],
+            "MIMode": "gdb",
+            "presentation": {
+                "hidden": false,
+                "group": "",
+                "order": 1,
+            },
+            "windows":{
+                "type": "cppvsdbg",
+                "program": "${workspaceFolder}/../hyperspace/build/Debug/annotate",
+                "cwd": "${workspaceFolder}/../hyperspace/build"
+            },
+            "osx": {
+                "MIMode": "lldb"
+            }
+        },
     ]
 }

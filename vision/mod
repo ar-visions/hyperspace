@@ -1,1 +1,1 @@
-dep(hyperspace:ai)
+dep(mx:mx mx:async vulkan:vkh @Vulkan ion:net ion:media ion:ux)

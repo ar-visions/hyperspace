@@ -5,9 +5,9 @@
 #include <ai/ai.hpp>
 ///
 #include "flatbuffers/flatbuffers.h"
-#include <tensorflow/lite/interpreter.h>
-#include <tensorflow/lite/kernels/register.h>
-#include <tensorflow/lite/model.h>
+#include <tensorflow/lite/core/interpreter.h>
+#include <tensorflow/lite/core/kernels/register.h>
+#include <tensorflow/lite/core/model.h>
 
 namespace ion {
 

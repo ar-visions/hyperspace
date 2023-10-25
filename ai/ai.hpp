@@ -2,7 +2,7 @@
 #include <mx/mx.hpp>
 
 namespace ion {
-/// two valid meanings inferred
+
 struct AInternal;
 
 struct AI:mx {
