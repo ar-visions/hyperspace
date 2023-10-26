@@ -8,7 +8,8 @@
             "version":  "2.12.0",
             "url":      "https://github.com/tensorflow/tensorflow",
             "cmake":    { "path": "./tensorflow/lite", "args":[] },
-            "commit":   "0db597d"
+            "commit":   "0db597d",
+            "platforms": ["win"]
         }
     ]
 }
