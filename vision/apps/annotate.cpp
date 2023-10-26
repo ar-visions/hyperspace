@@ -29,15 +29,32 @@ struct View:Element {
 
     void draw(Canvas& canvas) {
         static rgbad white = { 1.0, 1.0, 1.0, 1.0 };
-        static array<glm::vec3> cube_verts = {
-            glm::vec3 {-0.5f, -0.5f, -0.5f},
-            glm::vec3 { 0.5f, -0.5f, -0.5f},
-            glm::vec3 { 0.5f,  0.5f, -0.5f},
-            glm::vec3 {-0.5f,  0.5f, -0.5f},
-            glm::vec3 {-0.5f, -0.5f,  0.5f},
-            glm::vec3 { 0.5f, -0.5f,  0.5f},
-            glm::vec3 { 0.5f,  0.5f,  0.5f},
-            glm::vec3 {-0.5f,  0.5f,  0.5f}
+
+        std::array<glm::vec3, 24> cube_edges = {
+            // AB
+            glm::vec3(-0.5f, -0.5f, -0.5f), glm::vec3(0.5f, -0.5f, -0.5f),
+            // BC
+            glm::vec3(0.5f, -0.5f, -0.5f), glm::vec3(0.5f, 0.5f, -0.5f),
+            // CD
+            glm::vec3(0.5f, 0.5f, -0.5f), glm::vec3(-0.5f, 0.5f, -0.5f),
+            // DA
+            glm::vec3(-0.5f, 0.5f, -0.5f), glm::vec3(-0.5f, -0.5f, -0.5f),
+            // AE
+            glm::vec3(-0.5f, -0.5f, -0.5f), glm::vec3(-0.5f, -0.5f, 0.5f),
+            // BF
+            glm::vec3(0.5f, -0.5f, -0.5f), glm::vec3(0.5f, -0.5f, 0.5f),
+            // CG
+            glm::vec3(0.5f, 0.5f, -0.5f), glm::vec3(0.5f, 0.5f, 0.5f),
+            // DH
+            glm::vec3(-0.5f, 0.5f, -0.5f), glm::vec3(-0.5f, 0.5f, 0.5f),
+            // EF
+            glm::vec3(-0.5f, -0.5f, 0.5f), glm::vec3(0.5f, -0.5f, 0.5f),
+            // FG
+            glm::vec3(0.5f, -0.5f, 0.5f), glm::vec3(0.5f, 0.5f, 0.5f),
+            // GH
+            glm::vec3(0.5f, 0.5f, 0.5f), glm::vec3(-0.5f, 0.5f, 0.5f),
+            // HE
+            glm::vec3(-0.5f, 0.5f, 0.5f), glm::vec3(-0.5f, -0.5f, 0.5f)
         };
 
         static float angle;
@@ -52,7 +69,9 @@ struct View:Element {
         canvas.projection(model, view, proj);
         canvas.color(white);
         canvas.outline_sz(2);
-        canvas.outline(cube_verts);
+        for (size_t i = 0; i < 12; i++) {
+            canvas.line(cube_edges[i * 2 + 0], cube_edges[i * 2 + 1]);
+        }
         canvas.restore();
     }
 };
