@@ -31,6 +31,37 @@
                     "env":{"VERBOSE":"1"}
                 }
             }
+        },
+        {
+            "label": "build-rubiks",
+            "type": "shell",
+			"options": {
+                "cwd": "${workspaceFolder}/../hyperspace/build"
+            },
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared",
+                "group": "build0",
+                "clear": true
+            },
+			"isBackground": false,
+			"problemMatcher": ["$gcc"],
+            "windows": {
+                "command": "msbuild hyperspace.sln /t:rubiks"
+            },
+            "osx": {
+                "command": "make rubiks -j16"
+            },
+            "linux": {
+                "command": "make rubiks -j16",
+                "options":{
+                    "env":{"VERBOSE":"1"}
+                }
+            }
         }
     ]
 }
