@@ -88,25 +88,25 @@ struct UniformBufferObject {
         auto        currentTime = std::chrono::high_resolution_clock::now();
         float       time        = std::chrono::duration<float, std::chrono::seconds::period>(currentTime - startTime).count();
         
-        eye   = glm::vec3(0.0f, 4.0f, 6.0f);
+        eye   = glm::vec3(0.0f, 0.0f, 0.0f);
+        
         model = glm::rotate(
-            glm::mat4(1.0f),
+            glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.0f, 1.0f)),
             time * glm::radians(90.0f) * 0.5f,
             glm::vec3(0.0f, 0.0f, 1.0f)
         );
-        model = glm::scale(model, glm::vec3(10.0));
         view  = glm::lookAt(
             eye,
-            glm::vec3(0.0f, 0.0f, 0.0f),
-            glm::vec3(0.0f, 0.0f, 1.0f)
+            glm::vec3(0.0f, 0.0f, 1.0f),
+            glm::vec3(0.0f, 1.0f, 0.0f)
         );
+        
+        /// measuring the cubes appearance in series can give us a pretty good estimate of field of view.
+        /// essentially moving it forward back and to the sides
         proj  = glm::perspective(
             glm::radians(70.0f), /// 70 seems avg, but i want to have a range to service if we can get this at runtime, configured or measured
             ext.width / (float) ext.height,
-            0.05f, 10.0f); /// 5cm near, 10cm far
-            /// we should land rockets using CV -- why not build a game to land with the players 
-            /// impulse recordings in horrifying conditions.. use for training.  what games should be: recordings for ai.
-            /// your recordings become selectable
+            0.05f, 10.0f); /// 5cm near, 10m far (this is clip only)
         proj[1][1] *= -1;
 
         /// setup some scene lights
@@ -139,7 +139,6 @@ struct Rubiks:mx {
         }
 
         void init() {
-            printf("init called (war were declared)\n");
             gpu      = Window::select(sz, ResizeFn(resized), this);
             device   = Device::create(gpu);
             pipeline = Pipeline(
