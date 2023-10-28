@@ -26,5 +26,5 @@ layout(binding = 4) uniform sampler2D tx_reflect;
 
 void main() {
     vec4 color = texture(tx_color, v_uv).rgba;
-    pixel      = vec4(vec3(1.0, 0.0, 1.0), 1.0);
+    pixel      = vec4(color.rgb, 1.0);
 }
