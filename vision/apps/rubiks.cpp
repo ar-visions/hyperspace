@@ -2,24 +2,7 @@
 
 using namespace ion;
 
-/// a useful tooling experiment to create an annotation cursor out of a rubiks cube model; location and orientation.
-/// curious to know how accurate one could get the data from a single shot of vit.
-/// we would have composed accuracy on the labeling -- to me its exciting when you have that.
-/// use-case is value into any annotation in space, position and rotation in animation or singular plots.
-
-/// the wonderful thing about the rubiks is how easy it is to render different styles and shadings
-/// a simple pbr shader would be the ultimate way to do it, but a gloss map is probably fine with 
-/// not so sophisticated shading.  thats most of what you would be doing in pbr.
-/// probably more in pbr would be different env maps mipmapped for the various diffuse levels of lighting that pbr uses.
-/// i am interested in more gaussian distribution if its at all performant.
-
-/// anyway it probably wouldnt even make a huge difference on a simpleton approach, 
-/// but it would be the best way to do it for this domain of model.
-/// simple is just some OR and ANDs of blend src at varying scale, applied w perlin, 
-/// and perlin masked blurring or both the blend material and the mix
-/// i guess thats simple enough.  its possible that might even beat 3D but i dont 
-/// really want to hack around with that stuff.  just make the scene, and in a
-/// general way you can make others.. thats easier not harder
+/// a useful tooling experiment to create an annotation cursor out of a rubiks cube model; location, unit scale and orientation.
 
 struct Light {
     alignas(16) glm::vec4 pos;
@@ -73,6 +56,60 @@ namespace std {
     };
 }
 
+struct UniformBufferObject;
+
+struct Rubiks:mx {
+    struct M {
+        Vulkan          vk { 1, 0 };        /// this lazy loads 1.0 when GPU performs that action [singleton data]
+        vec2i           sz { 1920, 1080 };  /// store current window size
+        Window          gpu;                /// GPU class, responsible for holding onto GPU, Surface and GLFWwindow
+        Device          device;             /// Device created with GPU
+        Pipeline        pipeline;           /// pipeline for single object scene
+        bool            design = true;      /// design mode
+
+        static void resized(vec2i &sz, M* app) {
+            app->sz = sz;
+            app->device->framebufferResized = true;
+        }
+
+        void init() {
+            gpu      = Window::select(sz, ResizeFn(resized), this);
+            device   = Device::create(gpu);
+            pipeline = Pipeline(
+                Graphics<UniformBufferObject, Vertex>(device, "rubiks")
+            );
+        }
+
+        void run() {
+            while (!glfwWindowShouldClose(gpu->window)) {
+                glfwPollEvents();
+                device->mtx.lock();
+                array<Pipeline> pipes = { pipeline };
+                device->drawFrame(pipes);
+                /// i need to do it here <-
+                device->mtx.unlock();
+            }
+            vkDeviceWaitIdle(device);
+        }
+
+        register(M);
+    };
+    
+    mx_basic(Rubiks);
+
+    /// return the class in main() to loop and return exit-code
+    operator int() {
+        try {
+            data->pipeline->user = mem->grab();
+            data->run();
+        } catch (const std::exception& e) {
+            std::cerr << e.what() << std::endl;
+            return EXIT_FAILURE;
+        }
+        return EXIT_SUCCESS;
+    }
+};
+
 /// uniform has an update method with a pipeline arg
 struct UniformBufferObject {
     alignas(16) glm::mat4  model;
@@ -88,6 +125,10 @@ struct UniformBufferObject {
         auto        currentTime = std::chrono::high_resolution_clock::now();
         float       time        = std::chrono::duration<float, std::chrono::seconds::period>(currentTime - startTime).count();
         
+
+        Rubiks rubiks = pipeline->user.grab();
+        bool   design = rubiks->design;
+
         eye   = glm::vec3(0.0f, 0.0f, 0.0f);
 
         retry:
@@ -165,55 +206,6 @@ struct UniformBufferObject {
     }
 };
 
-struct Rubiks:mx {
-    struct M {
-        Vulkan          vk { 1, 0 };        /// this lazy loads 1.0 when GPU performs that action [singleton data]
-        vec2i           sz { 1920, 1080 };  /// store current window size
-        Window          gpu;                /// GPU class, responsible for holding onto GPU, Surface and GLFWwindow
-        Device          device;             /// Device created with GPU
-        Pipeline        pipeline;           /// pipeline for single object scene
-
-        static void resized(vec2i &sz, M* app) {
-            app->sz = sz;
-            app->device->framebufferResized = true;
-        }
-
-        void init() {
-            gpu      = Window::select(sz, ResizeFn(resized), this);
-            device   = Device::create(gpu);
-            pipeline = Pipeline(
-                Graphics<UniformBufferObject, Vertex>(device, "rubiks")
-            );
-        }
-
-        void run() {
-            while (!glfwWindowShouldClose(gpu->window)) {
-                glfwPollEvents();
-                device->mtx.lock();
-                array<Pipeline> pipes = { pipeline };
-                device->drawFrame(pipes);
-                /// i need to do it here <-
-                device->mtx.unlock();
-            }
-            vkDeviceWaitIdle(device);
-        }
-
-        register(M);
-    };
-    
-    mx_basic(Rubiks);
-
-    /// return the class in main() to loop and return exit-code
-    operator int() {
-        try {
-            data->run();
-        } catch (const std::exception& e) {
-            std::cerr << e.what() << std::endl;
-            return EXIT_FAILURE;
-        }
-        return EXIT_SUCCESS;
-    }
-};
 
 
 int main() {

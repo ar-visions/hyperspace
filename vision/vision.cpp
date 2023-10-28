@@ -1,6 +1,8 @@
 #include <vision/vision.hpp>
 #include <FastNoiseLite.h>
 
+namespace ion {
+
 image simplex_equirect(int width, int height, float scale) {
     FastNoiseLite fn = FastNoiseLite(1337 + (int)millis());
     fn.SetNoiseType(FastNoiseLite::NoiseType_OpenSimplex2);
@@ -44,4 +46,6 @@ image simplex_equirect(int width, int height, float scale) {
         }
     }
     return img;
+}
+
 }
