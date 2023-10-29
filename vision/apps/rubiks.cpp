@@ -121,95 +121,100 @@ struct UniformBufferObject {
     void update(Pipeline::impl *pipeline) {
         VkExtent2D &ext = pipeline->device->swapChainExtent;
 
-        static auto startTime   = std::chrono::high_resolution_clock::now();
-        auto        currentTime = std::chrono::high_resolution_clock::now();
-        float       time        = std::chrono::duration<float, std::chrono::seconds::period>(currentTime - startTime).count();
-        
-
         Rubiks rubiks = pipeline->user.grab();
         bool   design = rubiks->design;
 
         eye   = glm::vec3(0.0f, 0.0f, 0.0f);
 
-        retry:
-        
-        float min_z = 0.05f + (0.0575f / 2.0f);
-        float x     = rand::uniform(-1.0f, 1.0f);
-        float y     = rand::uniform(-1.0f, 1.0f);
-        float z     = rand::uniform(min_z, rand::uniform(min_z, rand::uniform(min_z, 2.0f)));
+        do {
+            float min_z = 0.05f + (0.0575f / 2.0f);
+            float x     = design ? 0.0 : rand::uniform(-1.0f, 1.0f);
+            float y     = design ? 0.0 : rand::uniform(-1.0f, 1.0f);
+            float z     = design ? 0.3 : rand::uniform(min_z, rand::uniform(min_z, rand::uniform(min_z, 2.0f)));
 
-        glm::vec3 cube_center = glm::vec3(x, y, z);
-        glm::mat4 pos = glm::translate(glm::mat4(1.0f), cube_center);
+            glm::vec3 cube_center = glm::vec3(x, y, z);
+            glm::mat4 pos = glm::translate(glm::mat4(1.0f), cube_center);
 
-        float rx = rand::uniform(0.0, 180.0);
-        model = glm::rotate(
-            pos,
-            glm::radians(rx),
-            glm::vec3(1.0f, 0.0f, 0.0f)
-        );
-        float ry = rand::uniform(0.0, 180.0);
-        model = glm::rotate(
-            model,
-            glm::radians(ry),
-            glm::vec3(0.0f, 1.0f, 0.0f)
-        );
-        float rz = rand::uniform(0.0, 180.0);
-        model = glm::rotate(
-            model,
-            glm::radians(rz),
-            glm::vec3(0.0f, 0.0f, 1.0f)
-        );
-        view  = glm::lookAt(
-            eye,
-            glm::vec3(0.0f, 0.0f, 1.0f),
-            glm::vec3(0.0f, 1.0f, 0.0f)
-        );
+            static float sr = 0;
+            if (design)
+                sr += 0.1;
+            static bool set = false;
 
-        float cube_rads = 0.0015f; // double since we want the whole cube in scene (verify this)
-        
-        /// measuring the cubes appearance in series can give us a pretty good estimate of field of view.
-        /// essentially moving it forward back and to the sides
-        proj  = glm::perspective(
-            glm::radians(70.0f), /// 70 seems avg, but i want to have a range to service if we can get this at runtime, configured or measured
-            ext.width / (float) ext.height,
-            0.05f, 10.0f); /// 5cm near, 10m far (this is clip only)
-        proj[1][1] *= -1;
+            //if (sr > 15.0 && !set) {
+            //    pipeline->textures[Asset::normal_equirect] = Texture::load(
+            //        pipeline->gfx->device, pipeline->gfx->model, Asset(Asset::normal_equirect));
+            //}
+            
+            float rx = design ? 0.0 : rand::uniform(0.0, 180.0);
+            model = glm::rotate(
+                pos,
+                glm::radians(rx),
+                glm::vec3(1.0f, 0.0f, 0.0f)
+            );
+            float ry = design ? sr : rand::uniform(0.0, 180.0);
+            model = glm::rotate(
+                model,
+                glm::radians(ry),
+                glm::vec3(0.0f, 1.0f, 0.0f)
+            );
+            float rz = design ? sr / 8 : rand::uniform(0.0, 180.0);
+            model = glm::rotate(
+                model,
+                glm::radians(rz),
+                glm::vec3(0.0f, 0.0f, 1.0f)
+            );
+            view  = glm::lookAt(
+                eye,
+                glm::vec3(0.0f, 0.0f, 1.0f),
+                glm::vec3(0.0f, 1.0f, 0.0f)
+            );
 
-        glm::mat4 VP     = proj * view;
-        glm::vec4 left   = glm::normalize(glm::row(VP, 3) + glm::row(VP, 0));
-        glm::vec4 right  = glm::normalize(glm::row(VP, 3) - glm::row(VP, 0));
-        glm::vec4 bottom = glm::normalize(glm::row(VP, 3) + glm::row(VP, 1));
-        glm::vec4 top    = glm::normalize(glm::row(VP, 3) - glm::row(VP, 1));
-        glm::vec4 vnear  = glm::normalize(glm::row(VP, 3) + glm::row(VP, 2));
-        glm::vec4 vfar   = glm::normalize(glm::row(VP, 3) - glm::row(VP, 2));
+            float cube_rads = 0.0015f; // double since we want the whole cube in scene (verify this)
+            
+            /// measuring the cubes appearance in series can give us a pretty good estimate of field of view.
+            /// essentially moving it forward back and to the sides
+            proj  = glm::perspective(
+                glm::radians(70.0f), /// 70 seems avg, but i want to have a range to service if we can get this at runtime, configured or measured
+                ext.width / (float) ext.height,
+                0.05f, 10.0f); /// 5cm near, 10m far (this is clip only)
+            proj[1][1] *= -1;
 
-        if (glm::dot(glm::vec3(left),   cube_center) + left.w   + cube_rads < 0) goto retry;
-        if (glm::dot(glm::vec3(right),  cube_center) + right.w  + cube_rads < 0) goto retry;
-        if (glm::dot(glm::vec3(bottom), cube_center) + bottom.w + cube_rads < 0) goto retry;
-        if (glm::dot(glm::vec3(top),    cube_center) + top.w    + cube_rads < 0) goto retry;
-        if (glm::dot(glm::vec3(vnear),  cube_center) + vnear.w  + cube_rads < 0) goto retry;
-        if (glm::dot(glm::vec3(vfar),   cube_center) + vfar.w   + cube_rads < 0) goto retry;
+            glm::mat4 VP     = proj * view;
+            glm::vec4 left   = glm::normalize(glm::row(VP, 3) + glm::row(VP, 0));
+            glm::vec4 right  = glm::normalize(glm::row(VP, 3) - glm::row(VP, 0));
+            glm::vec4 bottom = glm::normalize(glm::row(VP, 3) + glm::row(VP, 1));
+            glm::vec4 top    = glm::normalize(glm::row(VP, 3) - glm::row(VP, 1));
+            glm::vec4 vnear  = glm::normalize(glm::row(VP, 3) + glm::row(VP, 2));
+            glm::vec4 vfar   = glm::normalize(glm::row(VP, 3) - glm::row(VP, 2));
 
-        /// setup some scene lights
-        lights[0] = {
-            glm::vec4(glm::vec3(2.0f, 0.0f, 4.0f), 25.0f),
-            glm::vec4(1.0, 1.0, 1.0, 1.0)
-        };
-        lights[1] = {
-            glm::vec4(glm::vec3(0.0f, 0.0f, -5.0f), 100.0f),
-            glm::vec4(1.0, 1.0, 1.0, 1.0)
-        };
-        lights[2] = {
-            glm::vec4(glm::vec3(0.0f, 0.0f, -5.0f), 100.0f),
-            glm::vec4(1.0, 1.0, 1.0, 1.0)
-        };
+            if (glm::dot(glm::vec3(left),   cube_center) + left.w   + cube_rads < 0) continue;
+            if (glm::dot(glm::vec3(right),  cube_center) + right.w  + cube_rads < 0) continue;
+            if (glm::dot(glm::vec3(bottom), cube_center) + bottom.w + cube_rads < 0) continue;
+            if (glm::dot(glm::vec3(top),    cube_center) + top.w    + cube_rads < 0) continue;
+            if (glm::dot(glm::vec3(vnear),  cube_center) + vnear.w  + cube_rads < 0) continue;
+            if (glm::dot(glm::vec3(vfar),   cube_center) + vfar.w   + cube_rads < 0) continue;
+
+            lights[0] = {
+                glm::vec4(glm::vec3(2.0f, 0.0f, 4.0f), 25.0f),
+                glm::vec4(1.0, 1.0, 1.0, 1.0)
+            };
+            lights[1] = {
+                glm::vec4(glm::vec3(0.0f, 0.0f, -5.0f), 100.0f),
+                glm::vec4(1.0, 1.0, 1.0, 1.0)
+            };
+            lights[2] = {
+                glm::vec4(glm::vec3(0.0f, 0.0f, -5.0f), 100.0f),
+                glm::vec4(1.0, 1.0, 1.0, 1.0)
+            };
+        } while (0);
     }
 };
 
 
 
 int main() {
-    //image img = simplex_equirect(1024, 512, 0.1);
-    //img.save("simplex.png");
+    float scales[3] = { 64, 64, 64 };
+    image img = simplex_equirect_normal(0, 1024, 512, 15.0f, scales);
+    img.save("simplex-normals.png");
     return Rubiks();
 }
