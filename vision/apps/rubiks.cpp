@@ -126,6 +126,9 @@ struct UniformBufferObject {
 
         eye   = glm::vec3(0.0f, 0.0f, 0.0f);
 
+        image img = path { "textures/rubiks.color2.png" };
+        pipeline->textures[Asset::color - 1].update(img); ///
+
         do {
             float min_z = 0.05f + (0.0575f / 2.0f);
             float x     = design ? 0.0 : rand::uniform(-1.0f, 1.0f);
@@ -140,10 +143,12 @@ struct UniformBufferObject {
                 sr += 0.1;
             static bool set = false;
 
-            //if (sr > 15.0 && !set) {
-            //    pipeline->textures[Asset::normal_equirect] = Texture::load(
-            //        pipeline->gfx->device, pipeline->gfx->model, Asset(Asset::normal_equirect));
-            //}
+            /// 
+            static int seed_val = 1;
+            seed_val++;
+            //image img = simplex_equirect_normal(seed_val, 1024, 1024, 15.0f, scales);
+
+            //pipeline->textures[Asset::color].update(img);
             
             float rx = design ? 0.0 : rand::uniform(0.0, 180.0);
             model = glm::rotate(
@@ -213,8 +218,8 @@ struct UniformBufferObject {
 
 
 int main() {
-    float scales[3] = { 64, 64, 64 };
-    image img = simplex_equirect_normal(0, 1024, 512, 15.0f, scales);
-    img.save("simplex-normals.png");
+    //float scales[3] = { 64, 64, 64 };
+    //image img = simplex_equirect_normal(0, 1024, 512, 15.0f, scales);
+    //img.save("simplex-normals.png");
     return Rubiks();
 }
