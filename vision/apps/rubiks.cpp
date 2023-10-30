@@ -127,7 +127,7 @@ struct UniformBufferObject {
         eye   = glm::vec3(0.0f, 0.0f, 0.0f);
 
         image img = path { "textures/rubiks.color2.png" };
-        pipeline->textures[Asset::color - 1].update(img); ///
+        pipeline->textures[Asset::color - 1].update(img); /// updating in here is possible because the next call is to check for updates to descriptor
 
         do {
             float min_z = 0.05f + (0.0575f / 2.0f);
