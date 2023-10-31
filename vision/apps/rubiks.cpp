@@ -61,18 +61,25 @@ struct UniformBufferObject;
 struct Labels:mx {
     /// data protected by NAN
     struct M {
-        float  x = NAN,  y = NAN,  z = NAN;
-        float rx = NAN, ry = NAN, rz = NAN;
+        float   x = NAN,  y = NAN,  z = NAN;
+        float  rx = NAN, ry = NAN, rz = NAN;
+        float fov = NAN;
 
         doubly<prop> meta() {
             return {
-                { "x",   x },
-                { "y",   y },
-                { "z",   z },
-                { "rx", rx },
-                { "ry", ry },
-                { "rz", rz }
+                { "x",     x },
+                { "y",     y },
+                { "z",     z },
+                { "rx",   rx },
+                { "ry",   ry },
+                { "rz",   rz },
+                { "fov", fov }
             };
+        }
+        /// NAN helps to keep it real with a bool operator
+        operator bool() {
+            return !std::isnan(x)  && !std::isnan(y)  && !std::isnan(z) &&
+                   !std::isnan(rx) && !std::isnan(ry) && !std::isnan(rz);
         }
         register(M);
     };
@@ -80,17 +87,15 @@ struct Labels:mx {
     mx_basic(Labels);
     Labels(null_t):Labels() { }
 
-    /// NAN helps to keep it real with a bool operator
     operator bool() {
-        return !std::isnan(data->x)  && !std::isnan(data->y)  && !std::isnan(data->z) &&
-               !std::isnan(data->rx) && !std::isnan(data->ry) && !std::isnan(data->rz);
+        return *data;
     }
 };
 
 struct Rubiks:mx {
     struct M {
         Vulkan          vk { 1, 0 };        /// this lazy loads 1.0 when GPU performs that action [singleton data]
-        vec2i           sz { 1920, 1080 };  /// store current window size
+        vec2i           sz { 256, 144 };    /// store current window size
         Window          gpu;                /// GPU class, responsible for holding onto GPU, Surface and GLFWwindow
         Device          device;             /// Device created with GPU
         Pipeline        pipeline;           /// pipeline for single object scene
@@ -112,7 +117,7 @@ struct Rubiks:mx {
         }
 
         void run() {
-            ion::chdir(output_dir.cs());
+            str odir = output_dir.cs();
 
             while (!glfwWindowShouldClose(gpu->window)) {
                 glfwPollEvents();
@@ -124,14 +129,17 @@ struct Rubiks:mx {
                     image img      = device->screenshot();
                     assert(img);
                     
-                    str  base      = fmt { "rubiks-{0}", { str::rand(12, 'a', 'z') }};
-                    path path_png  = fmt { "{0}.png",    { base }};
-                    path path_json = fmt { "{0}.json",   { base }};
+                    str  base      = fmt { "rubiks-{0}",   { str::rand(12, 'a', 'z') }};
+                    path rel_png   = fmt { "{0}.png",      { base }};
+                    path path_png  = fmt { "{1}/{0}.png",  { base, odir }};
+                    path path_json = fmt { "{1}/{0}.json", { base, odir }};
+
                     if (path_png.exists() || path_json.exists())
                         continue;
+                    
                     var     annots = map<mx> {
-                        { "labels", labels },
-                        { "source", path_png }
+                        { "labels", labels  },
+                        { "source", rel_png }
                     };
                     assert(path_json.write(annots));
                     assert(img.save(path_png));
@@ -180,7 +188,7 @@ struct UniformBufferObject {
         //pipeline->textures[Asset::color].update(img); /// updating in here is possible because the next call is to check for updates to descriptor
 
         do {
-            float min_z = 0.05f + (0.0575f / 2.0f);
+            float min_z = 1.0 + 0.05f + (0.0575f / 2.0f);
             float x     = design ? 0.0 : rand::uniform(-1.0f, 1.0f);
             float y     = design ? 0.0 : rand::uniform(-1.0f, 1.0f);
             float z     = design ? 0.3 : rand::uniform(min_z, rand::uniform(min_z, rand::uniform(min_z, 2.0f)));
@@ -225,8 +233,9 @@ struct UniformBufferObject {
 
             /// set all fields in Labels
             rubiks->labels = Labels::M {
-                .x  =  x, .y  =  y, .z  =  z,
-                .rx = rx, .ry = ry, .rz = rz
+                .x   =  x, .y  =  y, .z  =  z,
+                .rx  = rx, .ry = ry, .rz = rz,
+                .fov = 70.0f
             };
 
             float cube_rads = 0.0015f; // double since we want the whole cube in scene (verify this)
@@ -236,7 +245,7 @@ struct UniformBufferObject {
             proj  = glm::perspective(
                 glm::radians(70.0f), /// 70 seems avg, but i want to have a range to service if we can get this at runtime, configured or measured
                 ext.width / (float) ext.height,
-                0.025f, 10.0f); /// 2.5cm near, 10m far (clip only)
+                0.075f, 10.0f); /// 7.5cm near, 10m far (clip only)
             proj[1][1] *= -1;
 
             glm::mat4 VP     = proj * view;
