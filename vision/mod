@@ -1,4 +1,4 @@
-dep(mx:mx mx:async vulkan:vkh @Vulkan ion:net ion:media ion:ux)
+dep(mx:mx ion:net ion:ux @Vulkan)
 
 includes(${EXTERN_DIR}/FastNoiseLite/Cpp)
 cpp(20)
