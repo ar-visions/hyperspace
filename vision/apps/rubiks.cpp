@@ -58,6 +58,35 @@ namespace std {
 
 struct UniformBufferObject;
 
+struct Labels:mx {
+    /// data protected by NAN
+    struct M {
+        float  x = NAN,  y = NAN,  z = NAN;
+        float rx = NAN, ry = NAN, rz = NAN;
+
+        doubly<prop> meta() {
+            return {
+                { "x",   x },
+                { "y",   y },
+                { "z",   z },
+                { "rx", rx },
+                { "ry", ry },
+                { "rz", rz }
+            };
+        }
+        register(M);
+    };
+
+    mx_basic(Labels);
+    Labels(null_t):Labels() { }
+
+    /// NAN helps to keep it real with a bool operator
+    operator bool() {
+        return !std::isnan(data->x)  && !std::isnan(data->y)  && !std::isnan(data->z) &&
+               !std::isnan(data->rx) && !std::isnan(data->ry) && !std::isnan(data->rz);
+    }
+};
+
 struct Rubiks:mx {
     struct M {
         Vulkan          vk { 1, 0 };        /// this lazy loads 1.0 when GPU performs that action [singleton data]
@@ -65,7 +94,9 @@ struct Rubiks:mx {
         Window          gpu;                /// GPU class, responsible for holding onto GPU, Surface and GLFWwindow
         Device          device;             /// Device created with GPU
         Pipeline        pipeline;           /// pipeline for single object scene
-        bool            design = true;      /// design mode
+        bool            design = false;     /// design mode
+        Labels          labels = null;
+        path            output_dir { "gen" };
 
         static void resized(vec2i &sz, M* app) {
             app->sz = sz;
@@ -81,12 +112,31 @@ struct Rubiks:mx {
         }
 
         void run() {
+            ion::chdir(output_dir.cs());
+
             while (!glfwWindowShouldClose(gpu->window)) {
                 glfwPollEvents();
                 device->mtx.lock();
                 array<Pipeline> pipes = { pipeline };
                 device->drawFrame(pipes);
-                /// i need to do it here <-
+
+                if (labels) {
+                    image img      = device->screenshot();
+                    assert(img);
+                    
+                    str  base      = fmt { "rubiks-{0}", { str::rand(12, 'a', 'z') }};
+                    path path_png  = fmt { "{0}.png",    { base }};
+                    path path_json = fmt { "{0}.json",   { base }};
+                    if (path_png.exists() || path_json.exists())
+                        continue;
+                    var     annots = map<mx> {
+                        { "labels", labels },
+                        { "source", path_png }
+                    };
+                    assert(path_json.write(annots));
+                    assert(img.save(path_png));
+                    labels = null;
+                }
                 device->mtx.unlock();
             }
             vkDeviceWaitIdle(device);
@@ -115,7 +165,7 @@ struct UniformBufferObject {
     alignas(16) glm::mat4  model;
     alignas(16) glm::mat4  view;
     alignas(16) glm::mat4  proj;
-    alignas(16) glm::vec3  eye;
+    alignas(16) glm::vec4  eye;
     alignas(16) Light      lights[3];
 
     void update(Pipeline::impl *pipeline) {
@@ -124,10 +174,10 @@ struct UniformBufferObject {
         Rubiks rubiks = pipeline->user.grab();
         bool   design = rubiks->design;
 
-        eye   = glm::vec3(0.0f, 0.0f, 0.0f);
-
-        image img = path { "textures/rubiks.color2.png" };
-        pipeline->textures[Asset::color - 1].update(img); /// updating in here is possible because the next call is to check for updates to descriptor
+        eye = glm::vec4(glm::vec3(0.0f, 0.0f, 0.0f), 0.0f); /// these must be padded in general
+        
+        //image img = path { "textures/rubiks.color2.png" };
+        //pipeline->textures[Asset::color].update(img); /// updating in here is possible because the next call is to check for updates to descriptor
 
         do {
             float min_z = 0.05f + (0.0575f / 2.0f);
@@ -147,7 +197,6 @@ struct UniformBufferObject {
             static int seed_val = 1;
             seed_val++;
             //image img = simplex_equirect_normal(seed_val, 1024, 1024, 15.0f, scales);
-
             //pipeline->textures[Asset::color].update(img);
             
             float rx = design ? 0.0 : rand::uniform(0.0, 180.0);
@@ -169,10 +218,16 @@ struct UniformBufferObject {
                 glm::vec3(0.0f, 0.0f, 1.0f)
             );
             view  = glm::lookAt(
-                eye,
+                glm::vec3(eye),
                 glm::vec3(0.0f, 0.0f, 1.0f),
                 glm::vec3(0.0f, 1.0f, 0.0f)
             );
+
+            /// set all fields in Labels
+            rubiks->labels = Labels::M {
+                .x  =  x, .y  =  y, .z  =  z,
+                .rx = rx, .ry = ry, .rz = rz
+            };
 
             float cube_rads = 0.0015f; // double since we want the whole cube in scene (verify this)
             
@@ -181,7 +236,7 @@ struct UniformBufferObject {
             proj  = glm::perspective(
                 glm::radians(70.0f), /// 70 seems avg, but i want to have a range to service if we can get this at runtime, configured or measured
                 ext.width / (float) ext.height,
-                0.05f, 10.0f); /// 5cm near, 10m far (this is clip only)
+                0.025f, 10.0f); /// 2.5cm near, 10m far (clip only)
             proj[1][1] *= -1;
 
             glm::mat4 VP     = proj * view;
