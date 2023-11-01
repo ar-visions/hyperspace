@@ -5,6 +5,10 @@ import tensorflow        as tf
 import tensorflow_addons as tfa
 
 from tensorflow.keras import layers, initializers, Sequential
+
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import Conv2D, MaxPooling2D, Flatten, Dense
+
 from einops import *
 from einops.layers.tensorflow import *
 
@@ -26,7 +30,7 @@ print("GPUs available:", gpus)
 # Define the path to the directory containing the JSON files
 W = 256
 H = 144
-lr = 0.001
+lr = 0.00001
 
 gen_path = './gen'
 
@@ -34,6 +38,11 @@ fields  = ['x','y','z','rx','ry','rz','fov']
 labels  = []
 sources = []
 i=0
+
+p = os.getcwd()
+
+if os.path.exists('build'):
+    os.chdir('build')
 
 # iterate over the files in the directory
 for f in os.listdir(gen_path):
@@ -72,7 +81,7 @@ print(len(sources)) #  2200
 def load_and_preprocess_image(path):
     image = tf.io.read_file(path)
     image = tf.image.decode_png(image, channels=3)
-    image = tf.image.resize(image, [H, W])
+    #image = tf.image.resize(image, [H, W])
     image = tf.keras.applications.efficientnet.preprocess_input(image)  # Replace with appropriate preprocessing for your model
     return image
 
@@ -87,9 +96,35 @@ test_data  = tf.data.Dataset.from_tensor_slices((X_test, y_test))
 test_data  = test_data.map(lambda x, y: (load_and_preprocess_image(x), y))
 
 # Batch and shuffle
-batch_size = 32
+batch_size = 1
 train_data = train_data.shuffle(1000).batch(batch_size).prefetch(tf.data.AUTOTUNE)
 test_data  = test_data.batch(batch_size).prefetch(tf.data.AUTOTUNE)
+
+# data looks fine, but doesnt train even with constant numbers lol
+# maybe we should try PyTorch?
+
+"""
+# Define the index of the image you want to retrieve
+desired_index = 10  # for example, the 11th image in the dataset
+
+# Iterate over the dataset to retrieve the specific image and label
+for i, (image, label) in enumerate(train_data.unbatch()):  # unbatch if the dataset is batched
+    if i == desired_index:
+        # This is the desired image
+        raw_image = image.numpy()  # Convert the TensorFlow tensor to a numpy array
+        raw_label = label.numpy()  # Convert the TensorFlow tensor to a numpy array
+        break
+
+# Now raw_image contains the image tensor and raw_label contains the corresponding label
+
+# If you need to visualize the image, use matplotlib or another library
+import matplotlib.pyplot as plt
+
+plt.imshow(raw_image.astype('uint8'))  # Make sure the image type is correct for visualization
+plt.title(f'Label: {raw_label}')
+plt.show()
+"""
+
 
 # define a custom metric for each field
 def create_custom_metric(index, field_name):
@@ -105,90 +140,55 @@ custom_metrics = [create_custom_metric(i, field) for i, field in enumerate(field
 num_outputs = y_train.shape[1]
 
 
-class PosEmbedding(layers.Layer):
-    def __init__(self, patch_size, emb_dim):
-        super().__init__()
-        self.patcher = Rearrange('b (h p1) (w p2) c -> b (h w) (p1 p2 c)', p1=patch_size, p2=patch_size)
-        self.emb_dim = emb_dim
-        self.patch_size = patch_size
-        self.init = initializers.RandomNormal()
-
-    def build(self, inp_dim):
-        num_patches = (inp_dim[1]//self.patch_size) * (inp_dim[2]//self.patch_size)
-        dim = self.patch_size * self.patch_size * inp_dim[-1] # p1 * p2 * c
-        self.dense = EinMix('b np d -> b np e', weight_shape='d e', d=dim, e=self.emb_dim)
-        self.pos_embedding = tf.Variable(self.init((1, num_patches+1, self.emb_dim)), trainable=True)
-        self.cls_token = tf.Variable(self.init((1, 1, self.emb_dim)), trainable=True)
-
-    def call(self, x, training=False):
-        cls_token = tf.repeat(self.cls_token, tf.shape(x)[0], 0)
-        x = self.dense(self.patcher(x), training=training)
-        x = tf.concat([cls_token, x], axis=1)
-        return x + self.pos_embedding
-
-class MHA(Layer):
-    def __init__(self, heads=8, dim_head=64):
-        super().__init__()
-        inner_dim = dim_head * heads
-        self.heads = heads
-        self.scale = dim_head ** -0.5
-        self.to_qkv = layers.Dense(units=inner_dim * 3, use_bias=False)
-
-    def call(self, x, training=False):
-        x = self.to_qkv(x, training=training)
-        qkv = tf.split(x, num_or_size_splits=3, axis=-1)
-        q, k, v = map(lambda t: rearrange(t, 'b n (h d) -> b h n d', h=self.heads), qkv)
-        qk = tf.nn.softmax(einsum(q, k, 'b h i d, b h j d -> b h i j') * self.scale)
-        attn = einsum(qk, v, 'b h i j, b h j d -> b h i d')
-        return rearrange(attn, 'b h i d -> b i (h d)')
-
-class TransformerBlock(layers.Layer):
-    def __init__(self, heads, dim_heads):
-        super().__init__()
-        self.mha = MHA(heads, dim_heads)
-        self.fc = Sequential([layers.Dense(dim_heads*heads, activation=tf.keras.activations.gelu),
-            layers.Dense(dim_heads*heads)])
-        self.ln1 = layers.LayerNormalization()
-        self.ln2 = layers.LayerNormalization()
-
-    def call(self, x, training=False):
-        x = self.mha(self.ln1(x, training=training))
-        h = self.ln2(x, training=training)
-        return self.fc(h) + x
+def build_model(input_shape, output_shape):
+    model = Sequential([
+        # First convolutional layer with max pooling
+        Conv2D(32, (3, 3), activation='relu', input_shape=input_shape),
+        MaxPooling2D((2, 2)),
+        
+        # Second convolutional layer with max pooling
+        Conv2D(64, (3, 3), activation='relu'),
+        MaxPooling2D((2, 2)),
+        
+        # Third convolutional layer with max pooling
+        Conv2D(128, (3, 3), activation='relu'),
+        MaxPooling2D((2, 2)),
+        
+        # Flatten the 3D output to 1D
+        Flatten(),
+        
+        # Dense layer with 128 units
+        Dense(128, activation='relu'),
+        
+        # Output layer with linear activation
+        Dense(output_shape, activation=None)  # No activation function (linear output)
+    ])
     
-class TransformerEncoder(tf.keras.Model):
-    def __init__(self, heads, dim_heads, n):
-        super().__init__()
-        self.module = [TransformerBlock(heads, dim_heads) for _ in range(n)]
+    return model
 
-    def call(self, x, training=False):
-        for layer in self.module:
-            x = layer(x, training=training)
-        return x
+# Input shape (height, width, channels)
+input_shape = (H, W, 3)
 
-class ViT(tf.keras.Model):
-    def __init__(self, classes, patch, dim, heads, dim_heads, n):
-        super().__init__()
-        self.embedding = PosEmbedding(patch, dim)
-        self.transformer = TransformerEncoder(heads, dim_heads, n)
-        self.fc = layers.Dense(classes)
+# Output shape (number of regression targets)
+output_shape = len(fields)
 
-    def call(self, x, training=False):
-        x = self.embedding(x, training=training)
-        x = self.transformer(x, training=training)
-        x = self.fc(x, training=training)
-        return x[:, 0, :]
-
-
-epochs = 10
-model = ViT(num_outputs, 8, 64, 4, 32, 3) # classes
+# Build the model
+model = build_model(input_shape, output_shape)
 
 # Compile the model
-optimizer = tf.keras.optimizers.Adam(learning_rate=lr)
-model.compile(optimizer=optimizer, loss='mean_squared_error', metrics=custom_metrics)
+model.compile(optimizer=Adam(learning_rate=lr),
+              loss='mean_squared_error',  # For regression tasks, mean squared error is commonly used.
+              metrics=custom_metrics)  # Mean absolute error as an additional metric
+
+# Summary of the model
+model.summary()
 
 # Train the model
-history = model.fit(train_data, epochs=epochs, validation_data=test_data)
+history = model.fit(train_data,
+                    epochs=10,  # You can decide the number of epochs
+                    validation_data=test_data)
 
-# Evaluate the model on test data
-loss, mae = model.evaluate(test_data)
+# Evaluate the model
+test_loss, test_mae = model.evaluate(test_data)
+print(f"Test loss: {test_loss}")
+print(f"Test MAE: {test_mae}")

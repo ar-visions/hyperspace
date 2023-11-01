@@ -95,7 +95,7 @@ struct Labels:mx {
 struct Rubiks:mx {
     struct M {
         Vulkan          vk { 1, 0 };        /// this lazy loads 1.0 when GPU performs that action [singleton data]
-        vec2i           sz { 1920, 1080 };    /// store current window size
+        vec2i           sz { 256, 144 };    /// store current window size
         Window          gpu;                /// GPU class, responsible for holding onto GPU, Surface and GLFWwindow
         Device          device;             /// Device created with GPU
         Pipeline        pipeline;           /// pipeline for single object scene
