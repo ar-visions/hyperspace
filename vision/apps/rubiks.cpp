@@ -95,7 +95,7 @@ struct Labels:mx {
 struct Rubiks:mx {
     struct M {
         Vulkan          vk { 1, 0 };        /// this lazy loads 1.0 when GPU performs that action [singleton data]
-        vec2i           sz { 256, 144 };    /// store current window size
+        vec2i           sz { 1920, 1080 };    /// store current window size
         Window          gpu;                /// GPU class, responsible for holding onto GPU, Surface and GLFWwindow
         Device          device;             /// Device created with GPU
         Pipeline        pipeline;           /// pipeline for single object scene
@@ -124,7 +124,8 @@ struct Rubiks:mx {
                 device->mtx.lock();
                 array<Pipeline> pipes = { pipeline };
                 device->drawFrame(pipes);
-
+                vkDeviceWaitIdle(device);
+                
                 if (labels) {
                     image img      = device->screenshot();
                     assert(img);
@@ -189,9 +190,9 @@ struct UniformBufferObject {
 
         do {
             float min_z = 1.0 + 0.05f + (0.0575f / 2.0f);
-            float x     = design ? 0.0 : rand::uniform(-1.0f, 1.0f);
-            float y     = design ? 0.0 : rand::uniform(-1.0f, 1.0f);
-            float z     = design ? 0.3 : rand::uniform(min_z, rand::uniform(min_z, rand::uniform(min_z, 2.0f)));
+            float x     = 0.0; //design ? 0.0 : rand::uniform(-1.0f, 1.0f);
+            float y     = 0.0; //design ? 0.0 : rand::uniform(-1.0f, 1.0f);
+            float z     = 0.3; //design ? 0.3 : rand::uniform(min_z, rand::uniform(min_z, rand::uniform(min_z, 2.0f)));
 
             glm::vec3 cube_center = glm::vec3(x, y, z);
             glm::mat4 pos = glm::translate(glm::mat4(1.0f), cube_center);
