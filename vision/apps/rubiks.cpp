@@ -1,4 +1,9 @@
 #include <vk/vk.hpp>
+#include <glm/gtc/matrix_access.hpp>
+#include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtc/quaternion.hpp>
+#include <glm/gtx/quaternion.hpp>
+#include <glm/gtc/random.hpp>
 
 using namespace ion;
 
@@ -62,7 +67,7 @@ struct Labels:mx {
     /// data protected by NAN
     struct M {
         float   x = NAN,  y = NAN,  z = NAN;
-        float  rx = NAN, ry = NAN, rz = NAN;
+        float  qx = NAN, qy = NAN, qz = NAN, qw = NAN;
         float fov = NAN;
 
         doubly<prop> meta() {
@@ -70,16 +75,17 @@ struct Labels:mx {
                 { "x",     x },
                 { "y",     y },
                 { "z",     z },
-                { "rx",   rx },
-                { "ry",   ry },
-                { "rz",   rz },
+                { "qx",   qx },
+                { "qy",   qy },
+                { "qz",   qz },
+                { "qw",   qw },
                 { "fov", fov }
             };
         }
         /// NAN helps to keep it real with a bool operator
         operator bool() {
-            return !std::isnan(x)  && !std::isnan(y)  && !std::isnan(z) &&
-                   !std::isnan(rx) && !std::isnan(ry) && !std::isnan(rz);
+            return !std::isnan(x)  && !std::isnan(y)  && !std::isnan(z)  &&
+                   !std::isnan(qx) && !std::isnan(qy) && !std::isnan(qz) && !std::isnan(qw);
         }
         register(M);
     };
@@ -118,6 +124,7 @@ struct Rubiks:mx {
 
         void run() {
             str odir = output_dir.cs();
+            output_dir.make_dir();
 
             while (!glfwWindowShouldClose(gpu->window)) {
                 glfwPollEvents();
@@ -169,6 +176,52 @@ struct Rubiks:mx {
     }
 };
 
+// Function to generate a random float in the range [min, max]
+float randomFloat(float min, float max) {
+    static std::random_device rd;
+    static std::mt19937 mt(rd());
+    std::uniform_real_distribution<float> dist(min, max);
+    return dist(mt);
+}
+
+// Function to generate a random unit vector
+glm::vec3 randomUnitVector() {
+    float theta = randomFloat(0.0f, 2.0f * glm::pi<float>());
+    float z = randomFloat(-1.0f, 1.0f);
+    float sqrtOneMinusZSquared = glm::sqrt(1.0f - z * z);
+    float x = sqrtOneMinusZSquared * glm::cos(theta);
+    float y = sqrtOneMinusZSquared * glm::sin(theta);
+    return glm::vec3(x, y, z);
+}
+
+// Function to generate a random quaternion
+#if 0
+/// this one injects double agents. [/spy-vs-spy-chaos in ML]
+glm::quat randomQuaternion() {
+    glm::vec3 axis = randomUnitVector();
+    float angle = randomFloat(0.0f, 2.0f * glm::pi<float>());
+    return glm::angleAxis(angle, axis);
+}
+#else
+/// no overlap here, prefer the positive sign
+glm::quat randomQuaternion() {
+    glm::vec3 axis(
+        glm::linearRand(-1.0f, 1.0f),
+        glm::linearRand(-1.0f, 1.0f),
+        glm::linearRand(-1.0f, 1.0f)
+    );
+    axis = glm::normalize(axis);
+
+    // Generate a random angle between 0 and π radians (0 to 180 degrees)
+    float angle = glm::linearRand(0.0f, glm::pi<float>());
+
+    // Create the quaternion from the axis-angle representation
+    glm::quat q = glm::angleAxis(angle, axis);
+
+    return q;
+}
+#endif
+
 /// uniform has an update method with a pipeline arg
 struct UniformBufferObject {
     alignas(16) glm::mat4  model;
@@ -188,95 +241,87 @@ struct UniformBufferObject {
         //image img = path { "textures/rubiks.color2.png" };
         //pipeline->textures[Asset::color].update(img); /// updating in here is possible because the next call is to check for updates to descriptor
 
-        do {
-            float min_z = 1.0 + 0.05f + (0.0575f / 2.0f);
-            float x     = 0.0; //design ? 0.0 : rand::uniform(-1.0f, 1.0f);
-            float y     = 0.0; //design ? 0.0 : rand::uniform(-1.0f, 1.0f);
-            float z     = 0.3; //design ? 0.3 : rand::uniform(min_z, rand::uniform(min_z, rand::uniform(min_z, 2.0f)));
+        float z_clip = 0.075f;
+        float min_z = z_clip + (0.0575f);
 
-            glm::vec3 cube_center = glm::vec3(x, y, z);
-            glm::mat4 pos = glm::translate(glm::mat4(1.0f), cube_center);
+        static bool did_perlin = false;
+        if (!did_perlin) {
+            float scales[3] = { 256, 256, 256 };
+            image img = simplex_equirect_normal(1, 1024, 512, 15.0f, scales);
+            img.save("noise_map.png");
+            did_perlin = true;
+        }
 
-            static float sr = 0;
-            if (design)
-                sr += 0.1;
-            static bool set = false;
+        proj  = glm::perspective(
+            glm::radians(70.0f),
+            ext.width / (float) ext.height,
+            z_clip, 10.0f); /// 7.5cm near, 10m far (clip only)
+        proj[1][1] *= -1;
 
-            /// 
-            static int seed_val = 1;
-            seed_val++;
-            //image img = simplex_equirect_normal(seed_val, 1024, 1024, 15.0f, scales);
-            //pipeline->textures[Asset::color].update(img);
-            
-            float rx = design ? 0.0 : rand::uniform(0.0, 180.0);
-            model = glm::rotate(
-                pos,
-                glm::radians(rx),
-                glm::vec3(1.0f, 0.0f, 0.0f)
-            );
-            float ry = design ? sr : rand::uniform(0.0, 180.0);
-            model = glm::rotate(
-                model,
-                glm::radians(ry),
-                glm::vec3(0.0f, 1.0f, 0.0f)
-            );
-            float rz = design ? sr / 8 : rand::uniform(0.0, 180.0);
-            model = glm::rotate(
-                model,
-                glm::radians(rz),
-                glm::vec3(0.0f, 0.0f, 1.0f)
-            );
-            view  = glm::lookAt(
-                glm::vec3(eye),
-                glm::vec3(0.0f, 0.0f, 1.0f),
-                glm::vec3(0.0f, 1.0f, 0.0f)
-            );
+        //pipeline->textures[Asset::color].update(img)
+        view  = glm::lookAt(
+            glm::vec3(eye),
+            glm::vec3(0.0f, 0.0f, 1.0f),
+            glm::vec3(0.0f, 1.0f, 0.0f)
+        );
 
-            /// set all fields in Labels
-            rubiks->labels = Labels::M {
-                .x   =  x, .y  =  y, .z  =  z,
-                .rx  = rx, .ry = ry, .rz = rz,
-                .fov = 70.0f
-            };
+        float rx = rand::uniform(-1.0f, 1.0f);
+        float ry = rand::uniform(-1.0f, 1.0f);
+        float rz = rand::uniform(-1.0f, 1.0f);
+        ///
+        glm::vec4 clip_pos    = glm::vec4(rx, ry, rz, 1.0f);
+        glm::vec4 view_pos    = glm::inverse(proj) * clip_pos;
+        view_pos  /= view_pos.w;
+        
+        glm::vec4 world_pos   = glm::inverse(view) * view_pos;
+        world_pos /= world_pos.w;
 
-            float cube_rads = 0.0015f; // double since we want the whole cube in scene (verify this)
-            
-            /// measuring the cubes appearance in series can give us a pretty good estimate of field of view.
-            /// essentially moving it forward back and to the sides
-            proj  = glm::perspective(
-                glm::radians(70.0f), /// 70 seems avg, but i want to have a range to service if we can get this at runtime, configured or measured
-                ext.width / (float) ext.height,
-                0.075f, 10.0f); /// 7.5cm near, 10m far (clip only)
-            proj[1][1] *= -1;
+        glm::vec3 cube_center = glm::vec3(world_pos);
 
-            glm::mat4 VP     = proj * view;
-            glm::vec4 left   = glm::normalize(glm::row(VP, 3) + glm::row(VP, 0));
-            glm::vec4 right  = glm::normalize(glm::row(VP, 3) - glm::row(VP, 0));
-            glm::vec4 bottom = glm::normalize(glm::row(VP, 3) + glm::row(VP, 1));
-            glm::vec4 top    = glm::normalize(glm::row(VP, 3) - glm::row(VP, 1));
-            glm::vec4 vnear  = glm::normalize(glm::row(VP, 3) + glm::row(VP, 2));
-            glm::vec4 vfar   = glm::normalize(glm::row(VP, 3) - glm::row(VP, 2));
+        glm::quat rquat       = randomQuaternion();
+        glm::mat4 position    = glm::translate(glm::mat4(1.0f), cube_center);
+        glm::mat4 rotation    = glm::toMat4(rquat);
 
-            if (glm::dot(glm::vec3(left),   cube_center) + left.w   + cube_rads < 0) continue;
-            if (glm::dot(glm::vec3(right),  cube_center) + right.w  + cube_rads < 0) continue;
-            if (glm::dot(glm::vec3(bottom), cube_center) + bottom.w + cube_rads < 0) continue;
-            if (glm::dot(glm::vec3(top),    cube_center) + top.w    + cube_rads < 0) continue;
-            if (glm::dot(glm::vec3(vnear),  cube_center) + vnear.w  + cube_rads < 0) continue;
-            if (glm::dot(glm::vec3(vfar),   cube_center) + vfar.w   + cube_rads < 0) continue;
+        model = position * rotation;
 
-            lights[0] = {
-                glm::vec4(glm::vec3(2.0f, 0.0f, 4.0f), 25.0f),
-                glm::vec4(1.0, 1.0, 1.0, 1.0)
-            };
-            lights[1] = {
-                glm::vec4(glm::vec3(0.0f, 0.0f, -5.0f), 100.0f),
-                glm::vec4(1.0, 1.0, 1.0, 1.0)
-            };
-            lights[2] = {
-                glm::vec4(glm::vec3(0.0f, 0.0f, -5.0f), 100.0f),
-                glm::vec4(1.0, 1.0, 1.0, 1.0)
-            };
-        } while (0);
+        static bool set = false;
+
+
+        /// set all fields in Labels
+        rubiks->labels = Labels::M {
+            .x   = cube_center.x,
+            .y   = cube_center.y,
+            .z   = cube_center.z,
+            .qx  = rquat.x,
+            .qy  = rquat.y,
+            .qz  = rquat.z,
+            .qw  = rquat.w,
+            .fov = 70.0f / 90.0f // normalize by 90
+        };
+
+        float cube_rads = 0.0575f * 5;
+
+        glm::mat4 VP     = proj * view;
+        glm::vec4 left   = glm::normalize(glm::row(VP, 3) + glm::row(VP, 0));
+        glm::vec4 right  = glm::normalize(glm::row(VP, 3) - glm::row(VP, 0));
+        glm::vec4 bottom = glm::normalize(glm::row(VP, 3) + glm::row(VP, 1));
+        glm::vec4 top    = glm::normalize(glm::row(VP, 3) - glm::row(VP, 1));
+        glm::vec4 vnear  = glm::normalize(glm::row(VP, 3) + glm::row(VP, 2));
+        glm::vec4 vfar   = glm::normalize(glm::row(VP, 3) - glm::row(VP, 2));
+
+        lights[0] = {
+            glm::vec4(glm::vec3(2.0f, 0.0f, 4.0f), 25.0f),
+            glm::vec4(1.0, 1.0, 1.0, 1.0)
+        };
+        lights[1] = {
+            glm::vec4(glm::vec3(0.0f, 0.0f, -5.0f), 100.0f),
+            glm::vec4(1.0, 1.0, 1.0, 1.0)
+        };
+        lights[2] = {
+            glm::vec4(glm::vec3(0.0f, 0.0f, -5.0f), 100.0f),
+            glm::vec4(1.0, 1.0, 1.0, 1.0)
+        };
+
     }
 };
 

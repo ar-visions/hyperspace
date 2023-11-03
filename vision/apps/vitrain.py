@@ -1,48 +1,65 @@
+import torch
+import torch.nn as nn
+from   torch.nn import TransformerEncoder, TransformerEncoderLayer
+import torch.optim as optim
+from   torch.utils.data import DataLoader, Dataset
+from   torchvision import transforms
+from   PIL import Image
+import numpy as np
 import json
 import os
-import numpy             as np
-import tensorflow        as tf
-import tensorflow_addons as tfa
-
-from tensorflow.keras import layers, initializers, Sequential
-
-from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers import Conv2D, MaxPooling2D, Flatten, Dense
-
-from einops import *
-from einops.layers.tensorflow import *
-
-from sklearn.model_selection import train_test_split
-from tensorflow.keras.preprocessing.image import ImageDataGenerator
-from tensorflow.keras.layers import GlobalAveragePooling2D, Dense
-from tensorflow.keras.models import Model
-from tensorflow.keras.optimizers import Adam
-from transformers import ViTModel, ViTConfig
-
-
-# Check if TensorFlow is built with GPU support
-print("Built with GPU support:", tf.test.is_built_with_cuda())
-
-# Check GPUs available to TensorFlow
-gpus = tf.config.list_physical_devices('GPU')
-print("GPUs available:", gpus)
 
 # Define the path to the directory containing the JSON files
 W = 256
 H = 144
-lr = 0.00001
+lr = 0.01
+
+# Get the number of available GPUs
+num_gpus = torch.cuda.device_count()
+
+if num_gpus > 0:
+    print(f"Number of GPUs available: {num_gpus}")
+    for i in range(num_gpus):
+        gpu_name = torch.cuda.get_device_name(i)
+        print(f"GPU {i}: {gpu_name}")
+else:
+    print("No GPUs available on this system.")
+
+# Check if a GPU is available
+device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 gen_path = './gen'
-
-fields  = ['x','y','z','rx','ry','rz','fov']
+fields  = ['x', 'y', 'z', 'qx', 'qy', 'qz', 'qw', 'fov']
 labels  = []
 sources = []
-i=0
 
 p = os.getcwd()
-
 if os.path.exists('build'):
     os.chdir('build')
+
+class CustomDataset(Dataset):
+    def __init__(self, image_paths, labels, transform=None):
+        self.image_paths = image_paths
+        self.labels = labels
+        self.transform = transform
+    
+    def __len__(self):
+        return len(self.image_paths)
+    
+    def __getitem__(self, index):
+        image = Image.open(self.image_paths[index]).convert('RGB')
+        label = self.labels[index]
+        
+        if self.transform is not None:
+            image = self.transform(image)
+        
+        return image, torch.tensor(label, dtype=torch.float32)
+
+# Define your transformations
+transform = transforms.Compose([
+    transforms.Resize((H, W)),  # Assuming H and W are defined
+    transforms.ToTensor(),
+])
 
 # iterate over the files in the directory
 for f in os.listdir(gen_path):
@@ -67,9 +84,6 @@ for f in os.listdir(gen_path):
         assert(os.path.exists(source))
         labels.append(lv)
         sources.append(source)
-        i=i+1
-        if(i % 100 == 0):
-            print(len(sources))
 
 # Convert labels to a numpy array
 labels = np.array(labels)
@@ -77,118 +91,116 @@ labels = np.array(labels)
 print(labels.shape) # (2200, 7)
 print(len(sources)) #  2200
 
-# Preprocess images and load them
-def load_and_preprocess_image(path):
-    image = tf.io.read_file(path)
-    image = tf.image.decode_png(image, channels=3)
-    #image = tf.image.resize(image, [H, W])
-    image = tf.keras.applications.efficientnet.preprocess_input(image)  # Replace with appropriate preprocessing for your model
-    return image
 
-# Create train/test split
-X_train, X_test, y_train, y_test = train_test_split(sources, labels, test_size=0.1, random_state=22)
+# Instantiate your dataset and dataloader
+dataset = CustomDataset(sources, labels, transform=transform)
+dataloader = DataLoader(dataset, batch_size=1, shuffle=True)
 
-# Create TensorFlow datasets
-train_data = tf.data.Dataset.from_tensor_slices((X_train, y_train))
-train_data = train_data.map(lambda x, y: (load_and_preprocess_image(x), y))
-
-test_data  = tf.data.Dataset.from_tensor_slices((X_test, y_test))
-test_data  = test_data.map(lambda x, y: (load_and_preprocess_image(x), y))
-
-# Batch and shuffle
-batch_size = 1
-train_data = train_data.shuffle(1000).batch(batch_size).prefetch(tf.data.AUTOTUNE)
-test_data  = test_data.batch(batch_size).prefetch(tf.data.AUTOTUNE)
-
-# data looks fine, but doesnt train even with constant numbers lol
-# maybe we should try PyTorch?
-
-"""
-# Define the index of the image you want to retrieve
-desired_index = 10  # for example, the 11th image in the dataset
-
-# Iterate over the dataset to retrieve the specific image and label
-for i, (image, label) in enumerate(train_data.unbatch()):  # unbatch if the dataset is batched
-    if i == desired_index:
-        # This is the desired image
-        raw_image = image.numpy()  # Convert the TensorFlow tensor to a numpy array
-        raw_label = label.numpy()  # Convert the TensorFlow tensor to a numpy array
-        break
-
-# Now raw_image contains the image tensor and raw_label contains the corresponding label
-
-# If you need to visualize the image, use matplotlib or another library
-import matplotlib.pyplot as plt
-
-plt.imshow(raw_image.astype('uint8'))  # Make sure the image type is correct for visualization
-plt.title(f'Label: {raw_label}')
-plt.show()
-"""
-
-
-# define a custom metric for each field
-def create_custom_metric(index, field_name):
-    def custom_metric(y_true, y_pred):
-        return tf.reduce_mean(tf.abs(y_true[:, index] - y_pred[:, index]), axis=-1)
-    custom_metric.__name__ = 'mae_' + field_name
-    return custom_metric
-
-# custom metrics for each field
-custom_metrics = [create_custom_metric(i, field) for i, field in enumerate(fields)]
-
-# Number of output neurons needed (one per regression task)
-num_outputs = y_train.shape[1]
-
-
-def build_model(input_shape, output_shape):
-    model = Sequential([
-        # First convolutional layer with max pooling
-        Conv2D(32, (3, 3), activation='relu', input_shape=input_shape),
-        MaxPooling2D((2, 2)),
-        
-        # Second convolutional layer with max pooling
-        Conv2D(64, (3, 3), activation='relu'),
-        MaxPooling2D((2, 2)),
-        
-        # Third convolutional layer with max pooling
-        Conv2D(128, (3, 3), activation='relu'),
-        MaxPooling2D((2, 2)),
-        
-        # Flatten the 3D output to 1D
-        Flatten(),
-        
-        # Dense layer with 128 units
-        Dense(128, activation='relu'),
-        
-        # Output layer with linear activation
-        Dense(output_shape, activation=None)  # No activation function (linear output)
-    ])
+# cnn model
+class SimpleCNN(nn.Module):
+    def __init__(self):
+        super(SimpleCNN, self).__init__()
+        self.conv_layers = nn.Sequential(
+            nn.Conv2d(3, 16, kernel_size=3, stride=1, padding=1),
+            nn.ReLU(),
+            nn.MaxPool2d(kernel_size=2, stride=2),
+            
+            nn.Conv2d(16, 32, kernel_size=3, stride=1, padding=1),
+            nn.ReLU(),
+            nn.MaxPool2d(kernel_size=2, stride=2)
+        )
+        self.fc_layers = nn.Sequential(
+            nn.Flatten(),
+            nn.Linear(32 * 36 * 64, 128),
+            nn.ReLU(),
+            nn.Linear(128, len(fields))  # No activation, directly outputting the regression values
+        )
     
-    return model
+    def forward(self, x):
+        x = self.conv_layers(x)
+        x = self.fc_layers(x)
+        return x
 
-# Input shape (height, width, channels)
-input_shape = (H, W, 3)
+# transformers ViT
+class ViT(nn.Module):
+    def __init__(self, in_channels, patch_size, emb_size, nheads, num_layers, num_outputs):
+        super(ViT, self).__init__()
+        self.patch_size  = patch_size
+        self.num_patches = (W // patch_size) * (H // patch_size)
+        self.emb_size    = emb_size
+        self.patch_emb   = nn.Conv2d(in_channels=in_channels, 
+                                   out_channels=emb_size, 
+                                   kernel_size=patch_size, 
+                                   stride=patch_size)
+        self.pos_emb     = nn.Parameter(torch.randn(1, self.num_patches+1, emb_size))
+        self.cls_token   = nn.Parameter(torch.randn(1, 1, emb_size))
+        encoder_layers   = TransformerEncoderLayer(d_model=emb_size, nhead=nheads)
+        self.transformer_encoder = TransformerEncoder(encoder_layer=encoder_layers, num_layers=num_layers)
+        self.mlp_head    = nn.Sequential(
+            nn.LayerNorm(emb_size),
+            nn.Linear(emb_size, num_outputs)  # Adjusted for arbitrary number of outputs
+        )
+    
+    def forward(self, x):
+        x = self.patch_emb(x)       # Create patch embeddings
+        x = x.flatten(2)            # Flatten the patch dimensions
+        x = x.transpose(1, 2)       # NxCxS to NxSxC
+        cls_tokens = self.cls_token.expand(x.shape[0], -1, -1)  # Duplicate cls token for batch
+        x = torch.cat((cls_tokens, x), dim=1)  # Concatenate cls token with patch embeddings
+        x = x + self.pos_emb        # Add positional embeddings
+        x = self.transformer_encoder(x)
+        cls_token_final = x[:, 0]   # We only use the cls token to classify
+        return self.mlp_head(cls_token_final)
 
-# Output shape (number of regression targets)
-output_shape = len(fields)
+vit = ViT(
+    in_channels=3,
+    patch_size=16,
+    emb_size=768,
+    nheads=8,
+    num_layers=6,
+    num_outputs=len(fields)  # This now matches your label count
+)
 
-# Build the model
-model = build_model(input_shape, output_shape)
+cnn = SimpleCNN()
 
-# Compile the model
-model.compile(optimizer=Adam(learning_rate=lr),
-              loss='mean_squared_error',  # For regression tasks, mean squared error is commonly used.
-              metrics=custom_metrics)  # Mean absolute error as an additional metric
+model = vit.to(device) if True else cnn.to(device)
 
-# Summary of the model
-model.summary()
+# Loss and optimizer
+criterion = nn.MSELoss()  # Mean Squared Error Loss
+optimizer = optim.Adam(model.parameters(), lr=lr)  # Assuming lr is defined
 
-# Train the model
-history = model.fit(train_data,
-                    epochs=10,  # You can decide the number of epochs
-                    validation_data=test_data)
+# Training loop
+num_epochs = 10  # Adjust this as needed
+for epoch in range(num_epochs):
+    model.train()  # Set the model to training mode
+    running_loss = 0.0
+    for batch_idx, (data, target) in enumerate(dataloader):
+        # move to gpu (lots-of-op) / cpu (no-op)
+        data, target = data.to(device), target.to(device)
 
-# Evaluate the model
-test_loss, test_mae = model.evaluate(test_data)
-print(f"Test loss: {test_loss}")
-print(f"Test MAE: {test_mae}")
+        # Zero the parameter gradients
+        optimizer.zero_grad()
+        
+        # Forward pass
+        output = model(data)
+        
+        # Calculate loss
+        loss = criterion(output, target)
+        
+        # Backward pass and optimize
+        loss.backward()
+        optimizer.step()
+
+        # Calculate MAE for each label
+        mae_per_label = torch.mean(torch.abs(output - target), dim=0)
+        
+        running_loss += loss.item()
+        if batch_idx % 100 == 0:  # Print every 100 batches
+            print(f'epoch [{epoch+1}/{num_epochs}], step [{batch_idx}/{len(dataloader)}], loss: {loss.item():.4f}', end='')
+            for label_idx in range(len(fields)):
+                print(f', mae {label_idx}: {mae_per_label[label_idx].item():.4f}', end='')
+            print()  # New line for the next print statement
+
+    # Print epoch loss
+    average_loss = running_loss / len(dataloader)
+    print(f'Epoch [{epoch+1}/{num_epochs}] Average Loss: {average_loss:.4f}')
