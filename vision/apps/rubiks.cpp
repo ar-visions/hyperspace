@@ -4,6 +4,7 @@
 #include <glm/gtc/quaternion.hpp>
 #include <glm/gtx/quaternion.hpp>
 #include <glm/gtc/random.hpp>
+//#include <glm/gtx/random.hpp>
 
 using namespace ion;
 
@@ -101,11 +102,11 @@ struct Labels:mx {
 struct Rubiks:mx {
     struct M {
         Vulkan          vk { 1, 0 };        /// this lazy loads 1.0 when GPU performs that action [singleton data]
-        vec2i           sz { 256, 144 };    /// store current window size
+        vec2i           sz { 256, 256 };    /// store current window size
         Window          gpu;                /// GPU class, responsible for holding onto GPU, Surface and GLFWwindow
         Device          device;             /// Device created with GPU
         Pipeline        pipeline;           /// pipeline for single object scene
-        bool            design = false;     /// design mode
+        bool            design = true;      /// design mode
         Labels          labels = null;
         path            output_dir { "gen" };
 
@@ -176,51 +177,44 @@ struct Rubiks:mx {
     }
 };
 
-// Function to generate a random float in the range [min, max]
-float randomFloat(float min, float max) {
-    static std::random_device rd;
-    static std::mt19937 mt(rd());
-    std::uniform_real_distribution<float> dist(min, max);
-    return dist(mt);
+glm::quat randomRotationMatrixWithoutDoubleCoverage() {
+    // Create a random rotation axis confined to one hemisphere (z >= 0)
+    glm::vec3 axis;
+    do {
+        axis = glm::sphericalRand(1.0f);
+    } while (axis.z < 0);
+
+    // Generate a random angle between 0 and 2π radians
+    float angle = glm::linearRand(0.0f, glm::two_pi<float>());
+
+    // Create the quaternion from the axis-angle representation
+    glm::quat quaternion = glm::angleAxis(angle, axis);
+
+    return quaternion;
 }
 
-// Function to generate a random unit vector
-glm::vec3 randomUnitVector() {
-    float theta = randomFloat(0.0f, 2.0f * glm::pi<float>());
-    float z = randomFloat(-1.0f, 1.0f);
-    float sqrtOneMinusZSquared = glm::sqrt(1.0f - z * z);
-    float x = sqrtOneMinusZSquared * glm::cos(theta);
-    float y = sqrtOneMinusZSquared * glm::sin(theta);
-    return glm::vec3(x, y, z);
-}
 
-// Function to generate a random quaternion
-#if 0
-/// this one injects double agents. [/spy-vs-spy-chaos in ML]
-glm::quat randomQuaternion() {
-    glm::vec3 axis = randomUnitVector();
-    float angle = randomFloat(0.0f, 2.0f * glm::pi<float>());
-    return glm::angleAxis(angle, axis);
-}
-#else
-/// no overlap here, prefer the positive sign
-glm::quat randomQuaternion() {
-    glm::vec3 axis(
+glm::quat uniqueRandomQuaternion() {
+    glm::vec3 rv(
         glm::linearRand(-1.0f, 1.0f),
         glm::linearRand(-1.0f, 1.0f),
         glm::linearRand(-1.0f, 1.0f)
     );
-    axis = glm::normalize(axis);
-
-    // Generate a random angle between 0 and π radians (0 to 180 degrees)
     float angle = glm::linearRand(0.0f, glm::pi<float>());
+    glm::quat q = glm::angleAxis(angle, glm::normalize(rv));
 
-    // Create the quaternion from the axis-angle representation
-    glm::quat q = glm::angleAxis(angle, axis);
+    // Enforce w to be non-negative
+    if (q.w < 0) {
+        q = -q; // Negating a quaternion gives the same rotation, this enforces w >= 0
+    }
 
     return q;
 }
-#endif
+
+glm::mat4 rotate_along(float rads, glm::vec3 axis) {
+    glm::mat4 m(1.0f);
+    return glm::rotate(m, rads, axis);
+}
 
 /// uniform has an update method with a pipeline arg
 struct UniformBufferObject {
@@ -265,11 +259,11 @@ struct UniformBufferObject {
             glm::vec3(0.0f, 1.0f, 0.0f)
         );
 
-        float rx = rand::uniform(-1.0f, 1.0f);
-        float ry = rand::uniform(-1.0f, 1.0f);
-        float rz = rand::uniform(-1.0f, 1.0f);
+        float px = rand::uniform( 0.0f, 0.0f);
+        float py = rand::uniform( 0.0f, 0.0f);
+        float pz = rand::uniform( 0.4f, 0.5f); /// almost no z variance gives us lots of detail
         ///
-        glm::vec4 clip_pos    = glm::vec4(rx, ry, rz, 1.0f);
+        glm::vec4 clip_pos    = glm::vec4(px, py, pz, 1.0f);
         glm::vec4 view_pos    = glm::inverse(proj) * clip_pos;
         view_pos  /= view_pos.w;
         
@@ -277,30 +271,26 @@ struct UniformBufferObject {
         world_pos /= world_pos.w;
 
         glm::vec3 cube_center = glm::vec3(world_pos);
-
-        glm::quat rquat       = randomQuaternion();
         glm::mat4 position    = glm::translate(glm::mat4(1.0f), cube_center);
-        glm::mat4 rotation    = glm::toMat4(rquat);
+        glm::quat qt = uniqueRandomQuaternion();
 
-        model = position * rotation;
+        model = position * glm::toMat4(qt); /// i do not want to disturb the effective rotation just set the translation on the model matrix along with the rotation
 
         static bool set = false;
-
 
         /// set all fields in Labels
         rubiks->labels = Labels::M {
             .x   = cube_center.x,
             .y   = cube_center.y,
             .z   = cube_center.z,
-            .qx  = rquat.x,
-            .qy  = rquat.y,
-            .qz  = rquat.z,
-            .qw  = rquat.w,
+            .qx  = qt.x,
+            .qy  = qt.y,
+            .qz  = qt.z,
+            .qw  = qt.w,
             .fov = 70.0f / 90.0f // normalize by 90
         };
 
         float cube_rads = 0.0575f * 5;
-
         glm::mat4 VP     = proj * view;
         glm::vec4 left   = glm::normalize(glm::row(VP, 3) + glm::row(VP, 0));
         glm::vec4 right  = glm::normalize(glm::row(VP, 3) - glm::row(VP, 0));
