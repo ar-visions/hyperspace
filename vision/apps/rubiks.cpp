@@ -193,22 +193,14 @@ glm::quat randomRotationMatrixWithoutDoubleCoverage() {
     return quaternion;
 }
 
-
-glm::quat uniqueRandomQuaternion() {
+glm::quat rand_quaternion() {
     glm::vec3 rv(
         glm::linearRand(-1.0f, 1.0f),
         glm::linearRand(-1.0f, 1.0f),
         glm::linearRand(-1.0f, 1.0f)
     );
     float angle = glm::linearRand(0.0f, glm::pi<float>());
-    glm::quat q = glm::angleAxis(angle, glm::normalize(rv));
-
-    // Enforce w to be non-negative
-    if (q.w < 0) {
-        q = -q; // Negating a quaternion gives the same rotation, this enforces w >= 0
-    }
-
-    return q;
+    return glm::angleAxis(angle, glm::normalize(rv));
 }
 
 glm::mat4 rotate_along(float rads, glm::vec3 axis) {
@@ -272,7 +264,7 @@ struct UniformBufferObject {
 
         glm::vec3 cube_center = glm::vec3(world_pos);
         glm::mat4 position    = glm::translate(glm::mat4(1.0f), cube_center);
-        glm::quat qt = uniqueRandomQuaternion();
+        glm::quat qt = rand_quaternion();
 
         model = position * glm::toMat4(qt); /// i do not want to disturb the effective rotation just set the translation on the model matrix along with the rotation
 
