@@ -31,7 +31,11 @@ struct Vertex {
                    v_uv[2 * uv_index + 0],
             1.0f - v_uv[2 * uv_index + 1]
         };
-        normal = { v_normal[3 * n_index  + 0], v_normal[3 * n_index + 1], v_normal[3 * n_index + 2] };
+        normal = {
+            v_normal[3 * n_index + 0],
+            v_normal[3 * n_index + 1],
+            v_normal[3 * n_index + 2]
+        };
     }
 
     doubly<prop> meta() const {
@@ -193,6 +197,10 @@ glm::quat randomRotationMatrixWithoutDoubleCoverage() {
     return quaternion;
 }
 
+glm::quat quaternion_rotate(glm::vec3 v, float rads) {
+    return glm::angleAxis(rads, glm::normalize(v));
+}
+
 glm::quat rand_quaternion() {
     glm::vec3 rv(
         glm::linearRand(-1.0f, 1.0f),
@@ -201,11 +209,6 @@ glm::quat rand_quaternion() {
     );
     float angle = glm::linearRand(0.0f, glm::pi<float>());
     return glm::angleAxis(angle, glm::normalize(rv));
-}
-
-glm::mat4 rotate_along(float rads, glm::vec3 axis) {
-    glm::mat4 m(1.0f);
-    return glm::rotate(m, rads, axis);
 }
 
 /// uniform has an update method with a pipeline arg
@@ -227,9 +230,6 @@ struct UniformBufferObject {
         //image img = path { "textures/rubiks.color2.png" };
         //pipeline->textures[Asset::color].update(img); /// updating in here is possible because the next call is to check for updates to descriptor
 
-        float z_clip = 0.075f;
-        float min_z = z_clip + (0.0575f);
-
         static bool did_perlin = false;
         if (!did_perlin) {
             float scales[3] = { 256, 256, 256 };
@@ -238,49 +238,57 @@ struct UniformBufferObject {
             did_perlin = true;
         }
 
-        proj  = glm::perspective(
+        float z_clip = 0.0575f / 2.0f * sin(radians(45.0f));
+        float z_far  = 10.0f;
+        float z_max_train = 1.0f;
+        proj = glm::perspective(
             glm::radians(70.0f),
             ext.width / (float) ext.height,
-            z_clip, 10.0f); /// 7.5cm near, 10m far (clip only)
+            z_clip, z_far); /// radius of 45 degrees * object size / 2 = near, 10m far (clip only)
         proj[1][1] *= -1;
 
         //pipeline->textures[Asset::color].update(img)
-        view  = glm::lookAt(
+        view = glm::lookAt(
             glm::vec3(eye),
             glm::vec3(0.0f, 0.0f, 1.0f),
-            glm::vec3(0.0f, 1.0f, 0.0f)
-        );
-
-        float px = rand::uniform( 0.0f, 0.0f);
-        float py = rand::uniform( 0.0f, 0.0f);
-        float pz = rand::uniform( 0.4f, 0.5f); /// almost no z variance gives us lots of detail
-        ///
-        glm::vec4 clip_pos    = glm::vec4(px, py, pz, 1.0f);
-        glm::vec4 view_pos    = glm::inverse(proj) * clip_pos;
-        view_pos  /= view_pos.w;
+            glm::vec3(0.0f, 1.0f, 0.0f));
         
-        glm::vec4 world_pos   = glm::inverse(view) * view_pos;
-        world_pos /= world_pos.w;
+        float px = design ? 0.00f           : rand::uniform( 0.0f, 0.0f);
+        float py = design ? 0.00f           : rand::uniform( 0.0f, 0.0f);
+        float pz = design ? (z_clip * 4.0f) : rand::uniform(z_clip / z_far * 2.0f, z_max_train / z_far); /// train to 1 meters out.  thats a very far away cube from the camera
 
-        glm::vec3 cube_center = glm::vec3(world_pos);
+        /// this should place the object as close to the camera as possible without a clip even as it rotates to 45
+        /// not sure why we are needing to double this zclip, as it should be zclip*2 intuitively.
+        /// perspective does not seem to work as i thought; the labeling should offset by this amount.
+        glm::vec3 cube_center = glm::vec3(px, py, pz);
         glm::mat4 position    = glm::translate(glm::mat4(1.0f), cube_center);
-        glm::quat qt = rand_quaternion();
 
-        model = position * glm::toMat4(qt); /// i do not want to disturb the effective rotation just set the translation on the model matrix along with the rotation
+        if (design) {
+            static float r = 0.0f;
+            static const float rads = M_PI * 2.0f;
+            glm::vec3 v  = glm::vec3(0.0f, 1.0f, 0.0f);
+            glm::quat qt = quaternion_rotate(v, r * rads);
+            r += rads * 0.00001;
+            if (r > rads)
+                r -= rads;
+            model = position * glm::toMat4(qt);
+        } else {
+            /// vary model rotation
+            glm::quat qt = rand_quaternion();
+            model = position * glm::toMat4(qt);
 
-        static bool set = false;
-
-        /// set all fields in Labels
-        rubiks->labels = Labels::M {
-            .x   = cube_center.x,
-            .y   = cube_center.y,
-            .z   = cube_center.z,
-            .qx  = qt.x,
-            .qy  = qt.y,
-            .qz  = qt.z,
-            .qw  = qt.w,
-            .fov = 70.0f / 90.0f // normalize by 90
-        };
+            /// set all fields in Labels
+            rubiks->labels = Labels::M {
+                .x   = cube_center.x,
+                .y   = cube_center.y,
+                .z   = cube_center.z,
+                .qx  = qt.x,
+                .qy  = qt.y,
+                .qz  = qt.z,
+                .qw  = qt.w,
+                .fov = 70.0f / 90.0f // normalize by 90
+            };
+        }
 
         float cube_rads = 0.0575f * 5;
         glm::mat4 VP     = proj * view;

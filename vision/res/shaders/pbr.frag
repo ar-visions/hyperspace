@@ -49,5 +49,5 @@ void main() {
 
     vec3 env_color = texture(tx_env, uv).rgb;
 
-    pixel = color; //vec4(color.rgb * env_color, color.a);
+    pixel = color / 1.0; //vec4(color.rgb * env_color, color.a);
 }
