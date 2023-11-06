@@ -17,10 +17,12 @@ layout(binding = 0) uniform UniformBufferObject {
     Light lights[3];
 } ubo;
 
-layout(location = 0) in vec3 v_pos; 
-layout(location = 1) in vec2 v_uv;
-layout(location = 2) in vec3 v_eye_dir;
-layout(location = 3) in mat3 v_tbn;
+layout(location = 0) in vec3 v_pos;
+layout(location = 1) in vec3 v_world_pos; 
+layout(location = 2) in vec2 v_uv;
+layout(location = 3) in vec3 v_eye_dir;
+layout(location = 4) in vec3 v_normal;
+layout(location = 5) in mat3 v_tbn;
 
 layout(location = 0) out vec4 pixel;
 
@@ -36,10 +38,10 @@ vec3 _reflect(vec3 I, vec3 N) {
 
 void main() {
     vec4 color  = texture(tx_color, v_uv).rgba;
-    vec3 normal = normalize(v_tbn * (texture(tx_normal, v_uv).rgb * 2.0 - 1.0)); // Using the normal map to perturb the normals
-    
+    vec3 normal = v_normal;//normalize(v_tbn * (texture(tx_normal, v_uv).rgb * 2.0 - 1.0)); // Using the normal map to perturb the normals
+
     // reflection vector
-    vec3 R = _reflect(normalize(v_eye_dir), normal);
+    vec3 R = _reflect(-normalize(v_eye_dir), normal);
 
     // convert reflection vector to spherical coordinates
     vec2 uv = vec2(atan(R.z, R.x), asin(R.y));
@@ -49,5 +51,5 @@ void main() {
 
     vec3 env_color = texture(tx_env, uv).rgb;
 
-    pixel = color / 1.0; //vec4(color.rgb * env_color, color.a);
+    pixel = vec4(color.rgb * env_color, color.a);
 }

@@ -18,6 +18,8 @@ struct Light {
 struct Vertex {
     glm::vec3 pos;
     glm::vec3 normal;
+    glm::vec3 tangent;
+    glm::vec3 bitangent;
     glm::vec2 uv;
 
     Vertex() { }
@@ -40,9 +42,11 @@ struct Vertex {
 
     doubly<prop> meta() const {
         return {
-            prop { "pos",      pos      },
-            prop { "normal",   normal   },
-            prop { "uv",       uv       }
+            prop { "pos",       pos       },
+            prop { "normal",    normal    },
+            prop { "tangent",   tangent   },
+            prop { "bitangent", bitangent },
+            prop { "uv",        uv        }
         };
     }
 
@@ -316,8 +320,10 @@ struct UniformBufferObject {
 };
 
 
-
 int main() {
+    //path p = "models/rubiks.gltf";
+    //Model gltf_model  = p.read<Model>(); /// convert to model!
+
     //float scales[3] = { 64, 64, 64 };
     //image img = simplex_equirect_normal(0, 1024, 512, 15.0f, scales);
     //img.save("simplex-normals.png");
