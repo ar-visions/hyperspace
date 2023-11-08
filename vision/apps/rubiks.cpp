@@ -8,8 +8,6 @@
 
 using namespace ion;
 
-/// a useful tooling experiment to create an annotation cursor out of a rubiks cube model; location, unit scale and orientation.
-
 struct Light {
     alignas(16) glm::vec4 pos;
     alignas(16) glm::vec4 color;
@@ -19,7 +17,6 @@ struct Vertex {
     glm::vec3 pos;
     glm::vec3 normal;
     glm::vec3 tangent;
-    glm::vec3 bitangent;
     glm::vec2 uv;
 
     Vertex() { }
@@ -42,11 +39,10 @@ struct Vertex {
 
     doubly<prop> meta() const {
         return {
-            prop { "pos",       pos       },
-            prop { "normal",    normal    },
-            prop { "tangent",   tangent   },
-            prop { "bitangent", bitangent },
-            prop { "uv",        uv        }
+            prop { "POSITION",      pos },
+            prop { "NORMAL",        normal },
+            prop { "TANGENT",       tangent },
+            prop { "TEXCOORD_0",    uv }
         };
     }
 
@@ -113,7 +109,7 @@ struct Rubiks:mx {
         vec2i           sz { 256, 256 };    /// store current window size
         Window          gpu;                /// GPU class, responsible for holding onto GPU, Surface and GLFWwindow
         Device          device;             /// Device created with GPU
-        Pipeline        pipeline;           /// pipeline for single object scene
+        Pipes           pipes;              /// pipeline for single object scene
         bool            design = true;      /// design mode
         Labels          labels = null;
         path            output_dir { "gen" };
@@ -126,20 +122,22 @@ struct Rubiks:mx {
         void init() {
             gpu      = Window::select(sz, ResizeFn(resized), this);
             device   = Device::create(gpu);
-            pipeline = Pipeline(
-                Graphics<UniformBufferObject, Vertex>(device, "rubiks")
+            pipes    = Pipes(
+                device, "rubiks", array<Graphics> {
+                    Graphics { "rubiks", typeof(UniformBufferObject), typeof(Vertex) }
+                }
             );
         }
 
         void run() {
             str odir = output_dir.cs();
             output_dir.make_dir();
+            array<Pipes> a_pipes({ pipes });
 
             while (!glfwWindowShouldClose(gpu->window)) {
                 glfwPollEvents();
                 device->mtx.lock();
-                array<Pipeline> pipes = { pipeline };
-                device->drawFrame(pipes);
+                device->drawFrame(a_pipes);
                 vkDeviceWaitIdle(device);
                 
                 if (labels) {
@@ -175,7 +173,8 @@ struct Rubiks:mx {
     /// return the class in main() to loop and return exit-code
     operator int() {
         try {
-            data->pipeline->user = mem->grab();
+            for (Pipeline &pipeline: data->pipes->pipelines)
+                pipeline->user = mem->grab();
             data->run();
         } catch (const std::exception& e) {
             std::cerr << e.what() << std::endl;
@@ -184,22 +183,6 @@ struct Rubiks:mx {
         return EXIT_SUCCESS;
     }
 };
-
-glm::quat randomRotationMatrixWithoutDoubleCoverage() {
-    // Create a random rotation axis confined to one hemisphere (z >= 0)
-    glm::vec3 axis;
-    do {
-        axis = glm::sphericalRand(1.0f);
-    } while (axis.z < 0);
-
-    // Generate a random angle between 0 and 2π radians
-    float angle = glm::linearRand(0.0f, glm::two_pi<float>());
-
-    // Create the quaternion from the axis-angle representation
-    glm::quat quaternion = glm::angleAxis(angle, axis);
-
-    return quaternion;
-}
 
 glm::quat quaternion_rotate(glm::vec3 v, float rads) {
     return glm::angleAxis(rads, glm::normalize(v));
@@ -223,11 +206,10 @@ struct UniformBufferObject {
     alignas(16) glm::vec4  eye;
     alignas(16) Light      lights[3];
 
-    void update(Pipeline::impl *pipeline) {
+    void process(Pipeline pipeline) { /// memory* -> Pipeline conversion implicit from the function in static
         VkExtent2D &ext = pipeline->device->swapChainExtent;
-
-        Rubiks rubiks = pipeline->user.grab();
-        bool   design = rubiks->design;
+        Rubiks   rubiks = pipeline->user.grab();
+        bool     design = rubiks->design;
 
         eye = glm::vec4(glm::vec3(0.0f, 0.0f, 0.0f), 0.0f); /// these must be padded in general
         
@@ -319,13 +301,6 @@ struct UniformBufferObject {
     }
 };
 
-
 int main() {
-    //path p = "models/rubiks.gltf";
-    //Model gltf_model  = p.read<Model>(); /// convert to model!
-
-    //float scales[3] = { 64, 64, 64 };
-    //image img = simplex_equirect_normal(0, 1024, 512, 15.0f, scales);
-    //img.save("simplex-normals.png");
     return Rubiks();
 }
