@@ -16,26 +16,8 @@ struct Light {
 struct Vertex {
     glm::vec3 pos;
     glm::vec3 normal;
-    glm::vec3 tangent;
+    glm::vec4 tangent;
     glm::vec2 uv;
-
-    Vertex() { }
-    Vertex(float *v_pos, int p_index, float *v_uv, int uv_index, float *v_normal, int n_index) {
-        pos = {
-            v_pos[3 * p_index + 0],
-            v_pos[3 * p_index + 1],
-            v_pos[3 * p_index + 2]
-        };
-        uv = glm::vec2 {
-                   v_uv[2 * uv_index + 0],
-            1.0f - v_uv[2 * uv_index + 1]
-        };
-        normal = {
-            v_normal[3 * n_index + 0],
-            v_normal[3 * n_index + 1],
-            v_normal[3 * n_index + 2]
-        };
-    }
 
     doubly<prop> meta() const {
         return {
@@ -47,12 +29,6 @@ struct Vertex {
     }
 
     type_register(Vertex);
-
-    bool operator==(const Vertex& b) const {
-        return pos    == b.pos    && 
-               normal == b.normal && 
-               uv     == b.uv;
-    }
 };
 
 /// used by uniqueVertices
@@ -124,7 +100,9 @@ struct Rubiks:mx {
             device   = Device::create(gpu);
             pipes    = Pipes(
                 device, "rubiks", array<Graphics> {
-                    Graphics { "rubiks", typeof(UniformBufferObject), typeof(Vertex) }
+                    Graphics {
+                        "rubiks", typeof(UniformBufferObject), typeof(Vertex)
+                    }
                 }
             );
         }
@@ -297,8 +275,8 @@ struct UniformBufferObject {
             glm::vec4(glm::vec3(0.0f, 0.0f, -5.0f), 100.0f),
             glm::vec4(1.0, 1.0, 1.0, 1.0)
         };
-
     }
+    register(UniformBufferObject);
 };
 
 int main() {
