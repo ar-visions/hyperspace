@@ -9,8 +9,8 @@
 using namespace ion;
 
 struct Light {
-    alignas(16) glm::vec4 pos;
-    alignas(16) glm::vec4 color;
+    glm::vec4 pos;
+    glm::vec4 color;
 };
 
 struct Vertex {
@@ -28,24 +28,13 @@ struct Vertex {
         };
     }
 
-    type_register(Vertex);
+    register(Vertex);
 };
-
-/// used by uniqueVertices
-namespace std {
-    template<> struct hash<Vertex> {
-        size_t operator()(Vertex const& vertex) const {
-            return ((hash<glm::vec3>()(vertex.pos) ^ 
-                    (hash<glm::vec3>()(vertex.normal) << 1)) >> 1) ^
-                    (hash<glm::vec2>()(vertex.uv)     << 1);
-        }
-    };
-}
 
 struct UniformBufferObject;
 
 struct Labels:mx {
-    /// data protected by NAN
+    /// data protected by NAN.
     struct M {
         float   x = NAN,  y = NAN,  z = NAN;
         float  qx = NAN, qy = NAN, qz = NAN, qw = NAN;
@@ -63,7 +52,7 @@ struct Labels:mx {
                 { "fov", fov }
             };
         }
-        /// NAN helps to keep it real with a bool operator
+        /// NAN check helps to keep it real when used with bool operator
         operator bool() {
             return !std::isnan(x)  && !std::isnan(y)  && !std::isnan(z)  &&
                    !std::isnan(qx) && !std::isnan(qy) && !std::isnan(qz) && !std::isnan(qw);
@@ -99,10 +88,8 @@ struct Rubiks:mx {
             gpu      = Window::select(sz, ResizeFn(resized), this);
             device   = Device::create(gpu);
             pipes    = Pipes(
-                device, "rubiks", array<Graphics> {
-                    Graphics {
-                        "rubiks", typeof(UniformBufferObject), typeof(Vertex)
-                    }
+                device, "rubiks", {
+                    Graphics { "Cube", typeof(UniformBufferObject), typeof(Vertex) }
                 }
             );
         }
@@ -232,7 +219,7 @@ struct UniformBufferObject {
             static const float rads = M_PI * 2.0f;
             glm::vec3 v  = glm::vec3(0.0f, 1.0f, 0.0f);
             glm::quat qt = quaternion_rotate(v, r * rads);
-            r += rads * 0.00001;
+            r += rads * 0.001;
             if (r > rads)
                 r -= rads;
             model = position * glm::toMat4(qt);
@@ -263,18 +250,9 @@ struct UniformBufferObject {
         glm::vec4 vnear  = glm::normalize(glm::row(VP, 3) + glm::row(VP, 2));
         glm::vec4 vfar   = glm::normalize(glm::row(VP, 3) - glm::row(VP, 2));
 
-        lights[0] = {
-            glm::vec4(glm::vec3(2.0f, 0.0f, 4.0f), 25.0f),
-            glm::vec4(1.0, 1.0, 1.0, 1.0)
-        };
-        lights[1] = {
-            glm::vec4(glm::vec3(0.0f, 0.0f, -5.0f), 100.0f),
-            glm::vec4(1.0, 1.0, 1.0, 1.0)
-        };
-        lights[2] = {
-            glm::vec4(glm::vec3(0.0f, 0.0f, -5.0f), 100.0f),
-            glm::vec4(1.0, 1.0, 1.0, 1.0)
-        };
+        lights[0] = { glm::vec4(glm::vec3(2.0f, 0.0f,  4.0f),  25.0f), glm::vec4(1.0, 1.0, 1.0, 1.0) };
+        lights[1] = { glm::vec4(glm::vec3(0.0f, 0.0f, -5.0f), 100.0f), glm::vec4(1.0, 1.0, 1.0, 1.0) };
+        lights[2] = { glm::vec4(glm::vec3(0.0f, 0.0f, -5.0f), 100.0f), glm::vec4(1.0, 1.0, 1.0, 1.0) };
     }
     register(UniformBufferObject);
 };
