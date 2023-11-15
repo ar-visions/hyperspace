@@ -88,8 +88,13 @@ struct Rubiks:mx {
             gpu      = Window::select(sz, ResizeFn(resized), this);
             device   = Device::create(gpu);
             pipes    = Pipes(
-                device, "rubiks", {
-                    Graphics { "Cube", typeof(UniformBufferObject), typeof(Vertex) }
+                device, null, {
+                    Graphics { "Cube", typeof(UniformBufferObject), typeof(Vertex),
+                        [&](mx &verts, mx &indices, array<image>& asset_images                                                                                                                                                                  )
+                        {
+                            // we can generate various parts
+                        }
+                    }
                 }
             );
         }
@@ -163,6 +168,7 @@ glm::quat rand_quaternion() {
     return glm::angleAxis(angle, glm::normalize(rv));
 }
 
+/// get gltf model output running nominal; there seems to be a skew in the coordinates so it may be being misread
 /// uniform has an update method with a pipeline arg
 struct UniformBufferObject {
     alignas(16) glm::mat4  model;
@@ -219,7 +225,7 @@ struct UniformBufferObject {
             static const float rads = M_PI * 2.0f;
             glm::vec3 v  = glm::vec3(0.0f, 1.0f, 0.0f);
             glm::quat qt = quaternion_rotate(v, r * rads);
-            r += rads * 0.001;
+            r += rads * 0.00001;
             if (r > rads)
                 r -= rads;
             model = position * glm::toMat4(qt);

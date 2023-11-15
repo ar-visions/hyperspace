@@ -1,4 +1,4 @@
-dep(mx:mx ion:net ion:ux @Vulkan)
+dep(mx:mx ion:net ion:ux hyperspace:camera @Vulkan)
 
 includes(${EXTERN_DIR}/FastNoiseLite/Cpp)
 cpp(20)

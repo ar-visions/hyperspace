@@ -27,8 +27,8 @@ void main() {
     vec3 normal    = normalize(nm * a_normal);
     v_pos          = world_pos.xyz;
     v_world_pos    = world_pos.xyz;
-    v_uv           = a_uv;
+    v_uv           = vec2(a_uv.x, 1.0 - a_uv.y);
     v_eye_dir      = normalize(world_pos.xyz - ubo.eye.xyz); // direction from eye to vertex
     v_tbn          = mat3(tangent, bitangent, normal);
-    gl_Position    = ubo.proj * ubo.view * ubo.model * vec4(a_pos, 1.0);
+    gl_Position    = ubo.proj * ubo.view * world_pos;
 }
