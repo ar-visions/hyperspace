@@ -14,7 +14,7 @@ int clamp(int v) {
     return v < 0 ? 0 : v > 255 ? 255 : v;
 }
 
-void yuy2_rgba(const BYTE* yuy2, BYTE* rgba, int width, int height) {
+void yuy2_rgba(const uint8_t* yuy2, uint8_t* rgba, int width, int height) {
     for (int y = 0; y < height; y++)
         for (int x = 0; x < width; x += 2) {
             // Extract YUY2 components
@@ -45,14 +45,67 @@ void yuy2_rgba(const BYTE* yuy2, BYTE* rgba, int width, int height) {
         }
 }
 
-async win_capture(lambda<bool(image& img)> frame) {
+void nv12_rgba(const uint8_t* nv12, uint8_t* rgba, int width, int height) {
+    const uint8_t* Y = nv12;
+    const uint8_t* UV = nv12 + (width * height);
+
+    for (int y = 0; y < height; y++)
+        for (int x = 0; x < width; x++) {
+            int Yindex = y * width + x;
+            int UVindex = (y / 2) * width + (x & ~1);
+
+            // Y component
+            int Yvalue = Y[Yindex] - 16;
+
+            // UV components
+            int U = UV[UVindex] - 128;
+            int V = UV[UVindex + 1] - 128;
+
+            // Set RGBA values
+            rgba8 *dst = (rgba8*)(rgba + 4 * Yindex);
+            dst->r = clamp((298 * Yvalue + 409 * V + 128) >> 8);
+            dst->g = clamp((298 * Yvalue - 100 * U - 208 * V + 128) >> 8);
+            dst->b = clamp((298 * Yvalue + 516 * U + 128) >> 8);
+            dst->a = 255;
+        }
+}
+
+VideoFormat video_format_from_guid(GUID &subtype) {
+    if (subtype == MFVideoFormat_MJPG)
+        return VideoFormat::MJPEG;
+    if (subtype == MFVideoFormat_YUY2)
+        return VideoFormat::YUY2;
+    if (subtype == MFVideoFormat_NV12)
+        return VideoFormat::NV12;
+    if (subtype == MFVideoFormat_H264)
+        return VideoFormat::H264;
+    return VideoFormat::undefined;
+}
+
+// Custom hash function for GUID
+struct GuidHash {
+    size_t operator()(const GUID& guid) const {
+        const uint64_t* p = reinterpret_cast<const uint64_t*>(&guid);
+        std::hash<uint64_t> hash;
+        return hash(p[0]) ^ hash(p[1]);
+    }
+};
+
+// Custom equality function for GUID
+struct GuidEqual {
+    bool operator()(const GUID& lhs, const GUID& rhs) const {
+        return (memcmp(&lhs, &rhs, sizeof(GUID)) == 0);
+    }
+};
+
+/// call stop on the sync(true) to force stop the service, and return its mx result
+async camera(array<VideoFormat> priority, str alias, int rwidth, int rheight, lambda<void(image& img)> frame) {
     
     /// start capture service
-    return async(1, [frame](runtime *rt, int i) -> mx {
+    return async(1, [priority, alias, frame, rwidth, rheight](runtime *rt, int i) -> mx {
         HRESULT hr = CoInitializeEx(NULL, COINIT_APARTMENTTHREADED);
-        if (FAILED(hr)) {
-            // Handle error
-        }
+        assert(!FAILED(hr));
+
         // Initialize Media Foundation
         MFStartup(MF_VERSION);
 
@@ -60,100 +113,133 @@ async win_capture(lambda<bool(image& img)> frame) {
         IMFAttributes*  pConfig     = null;
         IMFActivate**   ppDevices   = null;
         UINT32          deviceCount = 0;
+        VideoFormat     selected_format;
+        int             format_index    = -1;
+        int             selected_stream = -1;
 
-        // Enumerate video capture devices
+        // enum video capture devices, select one we have highest priority for
         MFCreateAttributes(&pConfig, 1);
         pConfig->SetGUID(MF_DEVSOURCE_ATTRIBUTE_SOURCE_TYPE, MF_DEVSOURCE_ATTRIBUTE_SOURCE_TYPE_VIDCAP_GUID);
         MFEnumDeviceSources(pConfig, &ppDevices, &deviceCount);
-
-        if (deviceCount == 0)
-            return false;
-
-        ppDevices[0]->ActivateObject(IID_PPV_ARGS(&pSource));
-
         IMFMediaType* pType = null;
-        IMFSourceReader* pReader = null;
-        MFCreateSourceReaderFromMediaSource(pSource, null, &pReader);
 
-        DWORD streamIndex = 0;
-        GUID  subtype = GUID_NULL;
-        while (SUCCEEDED(pReader->GetNativeMediaType(streamIndex, 0, &pType))) {
-            pType->GetGUID(MF_MT_SUBTYPE, &subtype);
+        /// using while so we can break early (format not found), or at end of statement
+        for (int i = 0; i < deviceCount; i++) {
+            u32 ulen = 0;
+            
+            ppDevices[i]->GetStringLength(MF_DEVSOURCE_ATTRIBUTE_FRIENDLY_NAME, &ulen);
+            utf16 device_name { size_t(ulen + 1) };
+            ppDevices[i]->GetString(MF_DEVSOURCE_ATTRIBUTE_FRIENDLY_NAME,
+                (WCHAR*)device_name.data, ulen + 1, &ulen);
+            cstr utf8_name  = device_name.to_utf8();
+            bool name_match = true;
+            if (alias && !strstr(utf8_name, alias.data))
+                name_match = false;
+            
+            free(utf8_name);
+            if (!name_match)
+                continue;
+            ppDevices[i]->ActivateObject(IID_PPV_ARGS(&pSource));
 
-            WCHAR subtypeName[40]; // Allocate a buffer for the string
-            StringFromGUID2(subtype, subtypeName, ARRAYSIZE(subtypeName));
-            wprintf(L"Subtype: %s\n", subtypeName);
-
-            // Set the resolution to 1920x1080, or 640x360 (16:9 formats; useful in arg form)
-            if (subtype == MFVideoFormat_MJPG || subtype == MFVideoFormat_YUY2) {
-                HRESULT hr = MFSetAttributeSize(pType, MF_MT_FRAME_SIZE, 1920, 1080);
-                if (!SUCCEEDED(hr))
-                    hr = MFSetAttributeSize(pType, MF_MT_FRAME_SIZE, 640, 360);
+            /// find the index of media source we want to select
+            DWORD stream_index   = 0;
+            GUID  subtype        = GUID_NULL;
+            IMFSourceReader* pReader = null;
+            MFCreateSourceReaderFromMediaSource(pSource, null, &pReader);
+            while (SUCCEEDED(pReader->GetNativeMediaType(stream_index, 0, &pType))) {
+                pType->GetGUID(MF_MT_SUBTYPE, &subtype);
+                VideoFormat vf = video_format_from_guid(subtype);
+                if (vf != VideoFormat::undefined) {
+                    int index = priority.index_of(vf);
+                    if (index >= 0 && (index < format_index || format_index == -1)) {
+                        selected_format = vf;
+                        format_index    = index;
+                        selected_stream = stream_index;
+                    }
+                }
+                pType->Release();
+                pType = null;
+                stream_index++;
+            }
+            
+            if (!selected_format)
+                continue;
+            
+            /// load selected_stream (index of MediaFoundation device stream)
+            if (SUCCEEDED(pReader->GetNativeMediaType(selected_stream, 0, &pType))) {
+                // set resolution; asset success
+                HRESULT hr = MFSetAttributeSize(pType, MF_MT_FRAME_SIZE, rwidth, rheight);
                 assert(SUCCEEDED(hr));
-                pReader->SetCurrentMediaType(streamIndex, null, pType);
-                break;
+                pReader->SetCurrentMediaType(selected_stream, null, pType);
             }
 
-            pType->Release();
-            pType = null;
-            streamIndex++;
-        }
+            if (pType) {
+                UINT32 width = 0, height = 0;
 
-        if (!pType)
-            return false;
+                /// get frame size; verify its the same as requested after we set it
+                assert(SUCCEEDED(MFGetAttributeSize(pType, MF_MT_FRAME_SIZE, &width, &height)));
+                assert(rwidth == width && rheight == height);
+                wprintf(L"width: %u, height: %u\n", width, height);
 
-        UINT32 width = 0, height = 0;
-        // Extract the width and height
-        if (SUCCEEDED(MFGetAttributeSize(pType, MF_MT_FRAME_SIZE, &width, &height)))
-            wprintf(L"Width: %u, Height: %u\n", width, height);
+                rgba8 *px  = (rgba8*)calloc(sizeof(rgba8), width * height);
+                image  img = image(size { height, width }, (rgba8*)px, 0);
 
-        rgba8 *px  = (rgba8*)calloc(sizeof(rgba8), width * height);
-        image  img = image(size { height, width }, (rgba8*)px, 0);
+                /// capture loop
+                while (!rt->stop) {
+                    DWORD      flags;
+                    IMFSample* pSample = null;
+                    pReader->ReadSample(MF_SOURCE_READER_ANY_STREAM, 0, null, &flags, null, &pSample);
+                    if (flags & MF_SOURCE_READERF_ENDOFSTREAM) /// end of stream
+                        break;
 
-        // Capture loop
-        for (;;) {
-            DWORD flags;
-            IMFSample* pSample = null;
-            pReader->ReadSample(MF_SOURCE_READER_ANY_STREAM, 0, null, &flags, null, &pSample);
+                    if (pSample) {
+                        IMFMediaBuffer* pBuffer         = null;
+                        BYTE*           pData           = null;
+                        DWORD           maxLength       = 0, 
+                                        currentLength   = 0;
 
-            if (flags & MF_SOURCE_READERF_ENDOFSTREAM)
-                break; // end of stream
+                        pSample->ConvertToContiguousBuffer(&pBuffer);
+                        pBuffer->Lock(&pData, &maxLength, &currentLength);
 
-            if (pSample) {
-                IMFMediaBuffer* pBuffer = null;
-                BYTE* pData = null;
-                DWORD maxLength = 0, currentLength = 0;
+                        switch (selected_format.value) {
+                            case VideoFormat::YUY2:
+                                // each pixel in YUY2 is 2 bytes: Y0 U0 Y1 V0, Y2 U1 Y3 V1, ...
+                                yuy2_rgba(pData, (BYTE*)img.data, width, height);
+                                break;
+                            case VideoFormat::NV12:
+                                nv12_rgba(pData, (BYTE*)img.data, width, height);
+                                break;
+                            case VideoFormat::MJPEG:
+                                assert(false);
+                                break;
+                            default:
+                                assert(false);
+                                break; 
+                        }
+                        pBuffer->Unlock();
+                        pBuffer->Release();
+                        pSample->Release();
 
-                pSample->ConvertToContiguousBuffer(&pBuffer);
-                pBuffer->Lock(&pData, &maxLength, &currentLength);
-
-                // Now pData points to the YUY2 data
-                // Each pixel in YUY2 is 2 bytes: Y0 U0 Y1 V0, Y2 U1 Y3 V1, ...
-                if (subtype == MFVideoFormat_YUY2)
-                    yuy2_rgba(pData, (BYTE*)img.data, width, height);
-                else if (subtype == MFVideoFormat_MJPG)
-                    assert(false);
-                
-                pBuffer->Unlock();
-                pBuffer->Release();
-                pSample->Release();
-
-                /// call user function
-                if (!frame(img))
-                    break;
+                        /// call user function -- dont call sync(true) from this procedure, for obvious raisonettes
+                        frame(img);
+                    }
+                }
+                /// cleanup
+                pType->Release();
             }
+            pReader->Release();
+            pSource->Release();
+            ppDevices[0]->Release();
+            CoTaskMemFree(ppDevices);
+            break;
         }
 
-        // Cleanup
-        pType->Release();
-        pReader->Release();
-        pSource->Release();
-        ppDevices[0]->Release();
-        CoTaskMemFree(ppDevices);
+        if (!selected_format)
+            console.log("camera: no suitable device/format found");
+        
         pConfig->Release();
-
         MFShutdown();
-        return true;
+        return pType != null;
     });
 }
 }

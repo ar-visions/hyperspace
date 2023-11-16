@@ -286,11 +286,11 @@ struct View:Element {
 
 int main(int argc, char *argv[]) {
 
-    auto fn = [](image &img) -> bool {
-        return false;
-    };
-
-    win_capture(fn);
+    async cam = camera({ VideoFormat::YUY2, VideoFormat::NV12, VideoFormat::MJPEG }, "USB", 640, 360,
+        [](image &img) -> void {
+            
+        }
+    );
 
     map<mx> defs  {{ "debug", uri { "ssh://ar-visions.com:1022" } }};
     map<mx> config { args::parse(argc, argv, defs) };
