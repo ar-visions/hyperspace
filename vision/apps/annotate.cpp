@@ -1,14 +1,9 @@
 /// ux apps are both gfx and 3D context.  the 3D background can be reality or a game or a picture of both.
-/// all of the scenes are staged differently
-/// issue is accessing the members of their View, perhaps not a deal at all?
-
-/// 1. add 3D ops to canvas.  
-/// 2. ability to detect when mouse is within range of shapes, which axis to select
-/// 3. integration into Element in subtle way
+/// integration of 3D into Element
 
 #include <ux/app.hpp>
 #include <math/math.hpp>
-#include <camera/win.hpp>
+#include <media/camera-win.hpp>
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_access.hpp>
 #include <glm/gtc/matrix_transform.hpp>
@@ -17,6 +12,21 @@
 #include <glm/gtc/random.hpp>
 
 using namespace ion;
+
+/// top left: Profiles Config (editor on Head)
+/// bottom left: Video Browser.  note: we are ONLY annotating videos, period. single image annotation is not feasible for profile management.
+/// profiles should only stay in video annotation files, not stored else-where.
+/// how does one select between camera and video?
+
+/// clearly we must 'record' here.  thats a must!
+/// if we did record, what libraries are we using?  FFmpeg
+/// outside of need to have video files to annotate and the niceity that a recording mechanism provides, does the app require recorder?
+/// lets say a riding helmet most definitely would use it.
+
+/// a bar on left side to select tools (Cube) for annotation view, (Camera) for Recorder
+/// its a good idea to implement tabs too. we need a user interface
+/// i think 'App' must have implicit video capabilities; a list of device sensors
+/// 
 
 /// the head visor model is pretty basic to describe:
 struct Head {
@@ -56,7 +66,7 @@ struct Head {
     register(Head);
 };
 
-/// get live feed going!
+/// this view needs to be split up into a Frame annotator/navigator along with Head Profiler (left side)
 
 struct View:Element {
     struct props {
@@ -73,11 +83,13 @@ struct View:Element {
         glm::mat4   proj;
         glm::vec3   start_pos;
         glm::quat   start_orient;
+        image       frame;
+        bool        live = true;
+        Streams     cam;
 
         properties meta() {
             return {
-                prop { "sample",  sample },
-                prop { "sample2", sample2 },
+                prop { "live",  live },
                 prop { "clicked", clicked}
             };
         }
@@ -86,6 +98,22 @@ struct View:Element {
     };
     
     component(View, Element, props);
+
+    void on_frame(Frame &frame) {
+        int test = 0;
+        test++;
+    }
+
+    void mounted() {
+        if (state->live) {
+            state->cam = camera(
+                { StreamType::Video, StreamType::Image }, /// ::Image resolves the Image from the encoded Video data
+                { Media::YUY2, Media::NV12, Media::MJPEG },
+                "USB", 640, 360
+            );
+            state->cam.listen({ this, &View::on_frame });
+        }
+    }
 
     void down() {
         state->last_xy      = Element::data->cursor;
@@ -272,10 +300,6 @@ struct View:Element {
         for (size_t i = 0; i < 10; i += 2)
             canvas.line(features[i + 0], features[i + 1]);
 
-        /// draw ears
-
-        /// draw nose
-
         canvas.color(blue);
         //glm::vec3 p = { 0.0f, 0.0f, 0.0f };
         //canvas.arc(p, 8.0f, 0.0, radians(180.0), true);
@@ -285,16 +309,10 @@ struct View:Element {
 };
 
 int main(int argc, char *argv[]) {
-
-    async cam = camera({ VideoFormat::YUY2, VideoFormat::NV12, VideoFormat::MJPEG }, "USB", 640, 360,
-        [](image &img) -> void {
-            
-        }
-    );
-
     map<mx> defs  {{ "debug", uri { "ssh://ar-visions.com:1022" } }};
     map<mx> config { args::parse(argc, argv, defs) };
     if    (!config) return args::defaults(defs);
+
     return App(config, [](App &app) -> node {
         return View {
             { "id", "main" }
