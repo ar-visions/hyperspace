@@ -83,7 +83,7 @@ struct View:Element {
         glm::mat4   proj;
         glm::vec3   start_pos;
         glm::quat   start_orient;
-        image       frame;
+        image       camera_image;
         bool        live = true;
         Streams     cam;
 
@@ -100,16 +100,15 @@ struct View:Element {
     component(View, Element, props);
 
     void on_frame(Frame &frame) {
-        int test = 0;
-        test++;
+        state->camera_image = frame.image;
     }
 
     void mounted() {
         if (state->live) {
             state->cam = camera(
-                { StreamType::Video, StreamType::Image }, /// ::Image resolves the Image from the encoded Video data
-                { Media::YUY2, Media::NV12, Media::MJPEG },
-                "USB", 640, 360
+                { StreamType::Audio, StreamType::Video, StreamType::Image }, /// ::Image resolves the Image from the encoded Video data
+                { Media::PCM, Media::PCMf32, Media::YUY2, Media::NV12, Media::MJPEG },
+                "Logi", "PnP", 640, 360
             );
             state->cam.listen({ this, &View::on_frame });
         }
@@ -226,13 +225,24 @@ struct View:Element {
         static rgbad blue  = { 0.0, 0.0, 1.0, 1.0 };
 
         canvas.save();
-        canvas.projection(model, view, proj);
+
+        /// draw webcam!
+        rectd     bounds { 0.0, 0.0, sz.x, sz.y };
+        vec2d     offset { 0.0, 0.0 };
+        alignment align  { 0.5, 0.5 };
+
         canvas.color(white);
+        
+        if (state->camera_image)
+            canvas.image(state->camera_image, bounds, align, offset); /// we need to project within this inner rect area!
+
+        canvas.projection(model, view, proj);
+
+        
         canvas.outline_sz(2);
         for (size_t i = 0; i < 12; i++)
             canvas.line(face_box[i * 2 + 0], face_box[i * 2 + 1]);
-
-
+        
         state->model = model;
         state->view  = view;
         state->proj  = proj;
@@ -303,7 +313,7 @@ struct View:Element {
         canvas.color(blue);
         //glm::vec3 p = { 0.0f, 0.0f, 0.0f };
         //canvas.arc(p, 8.0f, 0.0, radians(180.0), true);
-        
+
         canvas.restore();
     }
 };
