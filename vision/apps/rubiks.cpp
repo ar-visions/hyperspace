@@ -89,7 +89,7 @@ struct Rubiks:mx {
             device   = Device::create(gpu);
             pipes    = Pipes(
                 device, null, {
-                    Graphics { "Cube", typeof(UniformBufferObject), typeof(Vertex),
+                    Graphics { "Cube", typeof(UniformBufferObject), typeof(Vertex), "pbr",
                         [&](mx &verts, mx &indices, array<image>& asset_images                                                                                                                                                                  )
                         {
                             // we can generate various parts
