@@ -41,7 +41,7 @@ struct Head {
     float     ear_y    =   0.00f; /// ear_y position (same relative ratio from head plane center on y; this is on the side, not front
     float     nose_y   =   0.00f; /// nose relative from median y of head; no sense of x offset here as if anything
     float     nose_z   =   0.15f; /// nose tip z position; in face width scale 
-    glm::vec3 pos      = { 0.0f, 0.0f, 0.0f }; /// center of head in xyz cartesian coords
+    glm::vec3 pos      = { 0.0f, 0.0f, 0.5f }; /// center of head in xyz cartesian coords
     glm::quat orient   = { 1.0f, 0.0f, 0.0f, 0.0f }; /// rotation stored in quaternion form
     map<mx>   tags;
 
@@ -71,6 +71,7 @@ struct Head {
 struct View:Element {
     struct props {
         float       angle;
+        float       z_near, z_far;
         int         sample;
         int         sample2;
         callback    clicked;
@@ -81,8 +82,10 @@ struct View:Element {
         glm::mat4   model;
         glm::mat4   view;
         glm::mat4   proj;
+        glm::vec3   start_cursor;
         glm::vec3   start_pos;
         glm::quat   start_orient;
+        float       scroll_scale = 0.005f;
         image       camera_image;
         bool        live = true;
         Streams     cam;
@@ -115,9 +118,11 @@ struct View:Element {
     }
 
     void down() {
-        state->last_xy      = Element::data->cursor;
-        state->start_pos    = glm::vec3(Element::data->cursor.x, Element::data->cursor.y, 0.0);
-        state->start_orient = state->head.orient;
+        printf("mouse down\n");
+        state->last_xy        = Element::data->cursor;
+        state->start_cursor   = glm::vec3(Element::data->cursor.x, Element::data->cursor.y, 0.0);
+        state->start_pos      = state->head.pos;
+        state->start_orient   = state->head.orient;
 
         // Convert to NDC
         glm::vec2 ndc;
@@ -144,6 +149,27 @@ struct View:Element {
         return -glm::normalize(glm::vec3(v[0][2], v[1][2], v[2][2]));
     }
 
+    glm::vec3 to_world(float x, float y, float reference_z, const glm::mat4 &viewMatrix, const glm::mat4 &projectionMatrix, float screenWidth, float screenHeight) {
+        // Convert to normalized device coordinates
+        float xNDC = (2.0f * x) / screenWidth - 1.0f;
+        float yNDC = 1.0f - (2.0f * y) / screenHeight;
+        float zNDC = 2.0f * reference_z - 1.0f; // Convert the reference_z to NDC
+
+        glm::vec4 clipSpacePos = glm::vec4(xNDC, yNDC, zNDC, 1.0f);
+
+        // Convert from clip space to eye space
+        glm::vec4 eyeSpacePos = glm::inverse(projectionMatrix) * clipSpacePos;
+
+        // Convert from eye space to world space
+        glm::vec4 worldSpacePos = glm::inverse(viewMatrix) * eyeSpacePos;
+
+        return glm::vec3(worldSpacePos) / worldSpacePos.w;
+    }
+
+    void scroll(real x, real y) {
+        state->head.pos.z += y * state->scroll_scale;
+    }
+
     /// mouse move event
     void move() {
         if (!Element::data->active)
@@ -158,20 +184,34 @@ struct View:Element {
         float ax = glm::radians(diff.y * sensitivity); // Vertical   movement for X-axis rotation
         float ay = glm::radians(diff.x * sensitivity); // Horizontal movement for Y-axis rotation
 
-        if (state->swirl) {
-            state->head.orient = state->head.orient * glm::angleAxis(-ax, glm::vec3(0.0f, 0.0f, 1.0f));
+        auto cd = node::data;
+        glm::vec3 drag_pos = glm::vec3(Element::data->cursor.x, Element::data->cursor.y, 0.0f);
+        glm::vec3 drag_vec = state->start_cursor - drag_pos;
+        drag_vec.y = -drag_vec.y;
+
+        if (cd->composer->shift) {
+            float z  = state->head.pos.z;
+            float zv = 1.0f - (state->head.pos.z - state->z_near) / (state->z_far - state->z_near);
+
+            glm::vec3 cursor    = glm::vec3(Element::data->cursor.x, Element::data->cursor.y, 0.0f);
+            glm::vec3 p0        = to_world(state->start_cursor.x, state->start_cursor.y, zv, state->view, state->proj, state->sz.x, state->sz.y);
+            glm::vec3 p1        = to_world(cursor.x, cursor.y, zv, state->view, state->proj, state->sz.x, state->sz.y);
+            state->head.pos     = state->start_pos + (p1 - p0);
+            state->head.pos.z   = z;
+
+            printf("to_world: p0: %f %f %f\n", p0.x, p0.y, p0.z);
+            //printf("start_cursor: %f %f %f\n", state->start_cursor.x, state->start_cursor.y, state->start_cursor.z);
+            //printf("to_world: p1: %f %f %f\n", p1.x, p1.y, p1.z);
         } else {
-            glm::vec3 drag_pos = glm::vec3(Element::data->cursor.x, Element::data->cursor.y, 0.0f);
-
-            // Calculate the rotation axis and angle from the mouse drag
-            glm::vec3 drag_vec = state->start_pos - drag_pos;
-            drag_vec.y = -drag_vec.y;
-
-            glm::vec3 view_dir = forward();
-            glm::vec3 r_axis   = glm::normalize(glm::cross(drag_vec, view_dir));
-            float     r_amount = glm::length(drag_vec) / 100.0f; // Adjust sensitivity
-
-            state->head.orient = state->start_orient * glm::angleAxis(r_amount, r_axis);
+            if (state->swirl) {
+                state->head.orient = state->head.orient * glm::angleAxis(-ax, glm::vec3(0.0f, 0.0f, 1.0f));
+            } else {
+                // Calculate the rotation axis and angle from the mouse drag
+                glm::vec3 view_dir = forward();
+                glm::vec3 r_axis   = glm::normalize(glm::cross(drag_vec, view_dir));
+                float     r_amount = glm::length(drag_vec) / 100.0f; // Adjust sensitivity
+                state->head.orient = state->start_orient * glm::angleAxis(r_amount, r_axis);
+            }
         }
     }
 
@@ -200,18 +240,16 @@ struct View:Element {
             glm::vec3(-w,  h,  d), glm::vec3(-w, -h,  d)  // HE
         };
 
-        head.pos.z = 0.5f;
-
         glm::vec3 eye = glm::vec3(0.0f, 0.0f, 0.0f);
         
         //image img = path { "textures/rubiks.color2.png" };
         //pipeline->textures[Asset::color].update(img); /// updating in here is possible because the next call is to check for updates to descriptor
 
-        float z_clip = 0.0575f / 2.0f * sin(radians(45.0f));
-        float z_far  = 10.0f;
+        state->z_near = 0.0575f / 2.0f * sin(radians(45.0f));
+        state->z_far  = 10.0f;
 
         glm::vec2 sz    = { canvas.get_virtual_width(), canvas.get_virtual_height() };
-        glm::mat4 proj  = glm::perspective(glm::radians(70.0f), sz.x / sz.y, z_clip, z_far);
+        glm::mat4 proj  = glm::perspective(glm::radians(70.0f), sz.x / sz.y, state->z_near, state->z_far);
         proj[1][1] *= -1;
 
         state->sz = sz;
@@ -231,14 +269,14 @@ struct View:Element {
         vec2d     offset { 0.0, 0.0 };
         alignment align  { 0.5, 0.5 };
 
-        canvas.color(white);
-        
-        if (state->camera_image)
-            canvas.image(state->camera_image, bounds, align, offset); /// we need to project within this inner rect area!
+        canvas.color(blue);
+        canvas.fill(bounds);
+
+        if (state->camera_image) {
+            canvas.image(state->camera_image, bounds, align, offset);  
+        }
 
         canvas.projection(model, view, proj);
-
-        
         canvas.outline_sz(2);
         for (size_t i = 0; i < 12; i++)
             canvas.line(face_box[i * 2 + 0], face_box[i * 2 + 1]);
@@ -246,31 +284,6 @@ struct View:Element {
         state->model = model;
         state->view  = view;
         state->proj  = proj;
-
-        /// not super useful; a single point with x y z keys may perform the same constraint rotation without the blocking of features
-        /// not useful for eyes, not useful for faces;  blocks too much information.
-        /*
-        const int segments = 72;
-        std::vector<glm::vec3> x_circle(segments);
-        std::vector<glm::vec3> y_circle(segments);
-        std::vector<glm::vec3> z_circle(segments);
-
-        for (int i = 0; i < segments; i++) {
-            float angle = glm::radians(360.0f / segments * i);
-            x_circle[i] = glm::vec3(0.0f, w * cos(angle), w * sin(angle));
-            y_circle[i] = glm::vec3(w * cos(angle), 0.0f, w * sin(angle));
-            z_circle[i] = glm::vec3(w * cos(angle), w * sin(angle), 0.0f);
-        }
-        canvas.color(red);
-        for (size_t i = 0; i < segments; i++)
-            canvas.line(x_circle[i + 0], x_circle[(i + 1) % segments]);
-        canvas.color(green);
-        for (size_t i = 0; i < segments; i++)
-            canvas.line(y_circle[i + 0], y_circle[(i + 1) % segments]);
-        canvas.color(blue);
-        for (size_t i = 0; i < segments; i++)
-            canvas.line(z_circle[i + 0], z_circle[(i + 1) % segments]);
-        */
        
         /// draw eyes
         float fw    = head.width;
