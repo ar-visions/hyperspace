@@ -229,7 +229,7 @@ struct VideoView:Element {
             glm::vec3( w,  h,  -d), glm::vec3(-w,  h, -d), // GH
             glm::vec3(-w,  h,  -d), glm::vec3(-w, -h, -d)  // HE
         };
-
+ 
         glm::vec3 eye = glm::vec3(0.0f, 0.0f, 0.0f);
         
         //image img = path { "textures/rubiks.color2.png" };
