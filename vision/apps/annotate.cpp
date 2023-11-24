@@ -13,21 +13,6 @@
 
 using namespace ion;
 
-/// top left: Profiles Config (editor on Head)
-/// bottom left: Video Browser.  note: we are ONLY annotating videos, period. single image annotation is not feasible for profile management.
-/// profiles should only stay in video annotation files, not stored else-where.
-/// how does one select between camera and video?
-
-/// clearly we must 'record' here.  thats a must!
-/// if we did record, what libraries are we using?  FFmpeg
-/// outside of need to have video files to annotate and the niceity that a recording mechanism provides, does the app require recorder?
-/// lets say a riding helmet most definitely would use it.
-
-/// a bar on left side to select tools (Cube) for annotation view, (Camera) for Recorder
-/// its a good idea to implement tabs too. we need a user interface
-/// i think 'App' must have implicit video capabilities; a list of device sensors
-/// 
-
 /// the head visor model is pretty basic to describe:
 struct Head {
     float     width    =   0.15f; /// width  in meters -- ear canal to ear canal
@@ -68,7 +53,17 @@ struct Head {
 
 /// this view needs to be split up into a Frame annotator/navigator along with Head Profiler (left side)
 
-struct View:Element {
+///     icon bar / view:
+///     ------------------------
+///     head config
+///     browse
+///     record
+///     train?
+
+/// bottom bar with audio
+/// main view (VideoView)
+
+struct VideoView:Element {
     struct props {
         float       angle;
         float       z_near, z_far;
@@ -77,7 +72,6 @@ struct View:Element {
         callback    clicked;
         vec2d       last_xy;
         bool        swirl;
-        Head        head;
         glm::vec2   sz;
         glm::mat4   model;
         glm::mat4   view;
@@ -92,19 +86,16 @@ struct View:Element {
 
         properties meta() {
             return {
-                prop { "live",  live },
-                prop { "clicked", clicked}
+                prop { "live",    live    },
+                prop { "clicked", clicked },
+                prop { "sample",  sample  },
             };
         }
 
         type_register(props);
     };
-    
-    component(View, Element, props);
 
-    void on_frame(Frame &frame) {
-        state->camera_image = frame.image;
-    }
+    component(VideoView, Element, props);
 
     void mounted() {
         if (state->live) {
@@ -113,16 +104,20 @@ struct View:Element {
                 { Media::PCM, Media::PCMf32, Media::YUY2, Media::NV12, Media::MJPEG },
                 "Logi", "PnP", 640, 360
             );
-            state->cam.listen({ this, &View::on_frame });
+            state->cam.listen({ this, &VideoView::on_frame });
         }
     }
 
+    void on_frame(Frame &frame) {
+        state->camera_image = frame.image;
+    }
+
     void down() {
-        printf("mouse down\n");
+        Head *head = context<Head>("head");
         state->last_xy        = Element::data->cursor;
         state->start_cursor   = glm::vec3(Element::data->cursor.x, Element::data->cursor.y, 0.0);
-        state->start_pos      = state->head.pos;
-        state->start_orient   = state->head.orient;
+        state->start_pos      = head->pos;
+        state->start_orient   = head->orient;
 
         // Convert to NDC
         glm::vec2 ndc;
@@ -137,11 +132,11 @@ struct View:Element {
 
         double dist = glm::distance(
             glm::vec3(rayWor.x, rayWor.y, 0.0),
-            glm::vec3(state->head.pos.x, state->head.pos.y, 0.0)
+            glm::vec3(head->pos.x, head->pos.y, 0.0)
         );
         
         // A simple way to check if the click is outside the cube
-        state->swirl = dist > state->head.width * 1.0;
+        state->swirl = dist > head->width * 1.0;
     }
 
     glm::vec3 forward() {
@@ -167,11 +162,13 @@ struct View:Element {
     }
 
     void scroll(real x, real y) {
-        state->head.pos.z += y * state->scroll_scale;
+        Head *head = context<Head>("head");
+        head->pos.z += y * state->scroll_scale;
     }
 
     /// mouse move event
     void move() {
+        Head *head = context<Head>("head");
         if (!Element::data->active)
             return;
         
@@ -190,50 +187,47 @@ struct View:Element {
         drag_vec.y = -drag_vec.y;
 
         if (cd->composer->shift) {
-            float z  = state->head.pos.z;
-            float zv = 1.0f - (state->head.pos.z - state->z_near) / (state->z_far - state->z_near);
+            float z  = head->pos.z;
+            float zv = 1.0f - (head->pos.z - state->z_near) / (state->z_far - state->z_near);
 
             glm::vec3 cursor    = glm::vec3(Element::data->cursor.x, Element::data->cursor.y, 0.0f);
             glm::vec3 p0        = to_world(state->start_cursor.x, state->start_cursor.y, zv, state->view, state->proj, state->sz.x, state->sz.y);
             glm::vec3 p1        = to_world(cursor.x, cursor.y, zv, state->view, state->proj, state->sz.x, state->sz.y);
-            state->head.pos     = state->start_pos + (p1 - p0);
-            state->head.pos.z   = z;
+            
+            glm::vec3 pd = p1 - p0;
+            printf("pd = %.2f %.2f %.2f\n", pd.x, pd.y, pd.z);
+            printf("cursor = %.2f %.2f %.2f\n", cursor.x, cursor.y, cursor.z);
+
+            head->pos     = state->start_pos + (p1 - p0);
+            head->pos.z   = z;
         } else {
             if (state->swirl) {
-                state->head.orient = state->head.orient * glm::angleAxis(-ax, glm::vec3(0.0f, 0.0f, 1.0f));
+                head->orient = head->orient * glm::angleAxis(-ax, glm::vec3(0.0f, 0.0f, 1.0f));
             } else {
                 // Calculate the rotation axis and angle from the mouse drag
                 glm::vec3 view_dir = forward();
                 glm::vec3 r_axis   = glm::normalize(glm::cross(drag_vec, view_dir));
                 float     r_amount = glm::length(drag_vec) / 100.0f; // Adjust sensitivity
-                state->head.orient = state->start_orient * glm::angleAxis(r_amount, r_axis);
+                head->orient = state->start_orient * glm::angleAxis(r_amount, r_axis);
             }
         }
     }
 
     void draw(Canvas& canvas) {
-        Head &head = state->head;
-        float w = head.width  / 2.0f;
-        float h = head.height / 2.0f;
-        float d = head.depth  / 2.0f;
+        Head *head = context<Head>("head");
+        float w = head->width  / 2.0f;
+        float h = head->height / 2.0f;
+        float d = head->depth  / 2.0f;
 
         // test code:
         //glm::quat additional_rotation = glm::angleAxis(radians(1.0f) / 10.0f, glm::vec3(0.0f, 1.0f, 0.0f));
-        //head.orient = head.orient * additional_rotation;
+        //head->orient = head->orient * additional_rotation;
 
         array<glm::vec3> face_box = {
-            glm::vec3(-w, -h, -d), glm::vec3( w, -h, -d), // AB
-            glm::vec3( w, -h, -d), glm::vec3( w,  h, -d), // BC
-            glm::vec3( w,  h, -d), glm::vec3(-w,  h, -d), // CD
-            glm::vec3(-w,  h, -d), glm::vec3(-w, -h, -d), // DA
-            glm::vec3(-w, -h, -d), glm::vec3(-w, -h,  d), // AE
-            glm::vec3( w, -h, -d), glm::vec3( w, -h,  d), // BF
-            glm::vec3( w,  h, -d), glm::vec3( w,  h,  d), // CG
-            glm::vec3(-w,  h, -d), glm::vec3(-w,  h,  d), // DH
-            glm::vec3(-w, -h,  d), glm::vec3( w, -h,  d), // EF
-            glm::vec3( w, -h,  d), glm::vec3( w,  h,  d), // FG
-            glm::vec3( w,  h,  d), glm::vec3(-w,  h,  d), // GH
-            glm::vec3(-w,  h,  d), glm::vec3(-w, -h,  d)  // HE
+            glm::vec3(-w, -h,  -d), glm::vec3( w, -h, -d), // EF
+            glm::vec3( w, -h,  -d), glm::vec3( w,  h, -d), // FG
+            glm::vec3( w,  h,  -d), glm::vec3(-w,  h, -d), // GH
+            glm::vec3(-w,  h,  -d), glm::vec3(-w, -h, -d)  // HE
         };
 
         glm::vec3 eye = glm::vec3(0.0f, 0.0f, 0.0f);
@@ -244,14 +238,17 @@ struct View:Element {
         state->z_near = 0.0575f / 2.0f * sin(radians(45.0f));
         state->z_far  = 10.0f;
 
-        glm::vec2 sz    = { canvas.get_virtual_width(), canvas.get_virtual_height() };
+        float cw = canvas.get_virtual_width();
+        float ch = canvas.get_virtual_height();
+        glm::vec2 sz    = { cw, ch }; //{ Element::data->bounds.w, Element::data->bounds.h };
         glm::mat4 proj  = glm::perspective(glm::radians(70.0f), sz.x / sz.y, state->z_near, state->z_far);
         proj[1][1] *= -1;
 
         state->sz = sz;
+        printf("sample = %d\n", state->sample);
 
         glm::mat4 view  = glm::lookAt(eye, glm::vec3(0.0f, 0.0f, 1.0f), glm::vec3(0.0f, 1.0f, 0.0f));
-        glm::mat4 model = glm::translate(glm::mat4(1.0f), head.pos) * glm::toMat4(head.orient); // glm::rotate(glm::mat4(1.0f), angle, glm::vec3(0.0f, 1.0f, 0.0f));
+        glm::mat4 model = glm::translate(glm::mat4(1.0f), head->pos) * glm::toMat4(head->orient); // glm::rotate(glm::mat4(1.0f), angle, glm::vec3(0.0f, 1.0f, 0.0f));
 
         static rgbad white = { 1.0, 1.0, 1.0, 1.0 };
         static rgbad red   = { 1.0, 0.0, 0.0, 1.0 };
@@ -265,7 +262,7 @@ struct View:Element {
         vec2d     offset { 0.0, 0.0 };
         alignment align  { 0.5, 0.5 };
 
-        canvas.color(blue);
+        canvas.color(Element::data->drawings[operation::fill].color);
         canvas.fill(bounds);
 
         if (state->camera_image) {
@@ -274,7 +271,7 @@ struct View:Element {
 
         canvas.projection(model, view, proj);
         canvas.outline_sz(2);
-        for (size_t i = 0; i < 12; i++)
+        for (size_t i = 0; i < 4; i++)
             canvas.line(face_box[i * 2 + 0], face_box[i * 2 + 1]);
         
         state->model = model;
@@ -282,20 +279,20 @@ struct View:Element {
         state->proj  = proj;
        
         /// draw eyes
-        float fw    = head.width;
-        float fh    = head.height;
-        float eye_w = fw * head.eye_w;
-        float eye_x = fw * head.eye_x;
-        float eye_y = fw * head.eye_y;
-        float eye_z = fw * head.eye_z; /// frontal plane is the eye plane as annotated; useful to have a z offset
+        float fw    = head->width;
+        float fh    = head->height;
+        float eye_w = fw * head->eye_w;
+        float eye_x = fw * head->eye_x;
+        float eye_y = fw * head->eye_y;
+        float eye_z = fw * head->eye_z; /// frontal plane is the eye plane as annotated; useful to have a z offset
         
         float nose_x = 0.0f;
-        float nose_y = fh * head.nose_y;
-        float nose_z = fw * head.nose_z;
+        float nose_y = fh * head->nose_y;
+        float nose_z = fw * head->nose_z;
         float nose_h = fh * 0.02f;
 
-        float ear_x  = fw * head.ear_x;
-        float ear_y  = fh * head.ear_y;
+        float ear_x  = fw * head->ear_x;
+        float ear_y  = fh * head->ear_y;
         float ear_h  = fh * 0.02f; /// should be a circle or a square, not a line segment
         canvas.outline_sz(1);
 
@@ -327,13 +324,36 @@ struct View:Element {
     }
 };
 
+struct Annotate:Element {
+    struct props {
+        Head head;
+        properties meta() {
+            return {
+                prop { "head", head }
+            };
+        }
+        type_register(props);
+    };
+    
+    component(Annotate, Element, props);
+
+    node update() {
+        Head *head = &state->head;
+        return array<node> {
+            VideoView {
+                { "id", "video-view" }
+            }
+        };
+    }
+};
+
 int main(int argc, char *argv[]) {
     map<mx> defs  {{ "debug", uri { null }}};
     map<mx> config { args::parse(argc, argv, defs) };
     if    (!config) return args::defaults(defs);
 
     return App(config, [](App &app) -> node {
-        return View {
+        return Annotate {
             { "id", "main" }
         };
     });

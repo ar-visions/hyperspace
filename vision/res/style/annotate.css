@@ -1,0 +1,9 @@
+
+VideoView {
+    fill-color: #f0f;
+    sample:22;
+}
+
+Annotate {
+    child-area: l80 t0 r0 b0; 
+}
