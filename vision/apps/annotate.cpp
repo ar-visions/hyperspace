@@ -198,10 +198,6 @@ struct View:Element {
             glm::vec3 p1        = to_world(cursor.x, cursor.y, zv, state->view, state->proj, state->sz.x, state->sz.y);
             state->head.pos     = state->start_pos + (p1 - p0);
             state->head.pos.z   = z;
-
-            printf("to_world: p0: %f %f %f\n", p0.x, p0.y, p0.z);
-            //printf("start_cursor: %f %f %f\n", state->start_cursor.x, state->start_cursor.y, state->start_cursor.z);
-            //printf("to_world: p1: %f %f %f\n", p1.x, p1.y, p1.z);
         } else {
             if (state->swirl) {
                 state->head.orient = state->head.orient * glm::angleAxis(-ax, glm::vec3(0.0f, 0.0f, 1.0f));
@@ -332,7 +328,7 @@ struct View:Element {
 };
 
 int main(int argc, char *argv[]) {
-    map<mx> defs  {{ "debug", uri { "ssh://ar-visions.com:1022" } }};
+    map<mx> defs  {{ "debug", uri { null }}};
     map<mx> config { args::parse(argc, argv, defs) };
     if    (!config) return args::defaults(defs);
 
