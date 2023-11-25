@@ -7,3 +7,12 @@ VideoView {
 Annotate {
     child-area: l80 t0 r0 b0; 
 }
+
+Navigator {
+    fill-area: l-80 t0 l80 b0;
+    fill-color: #ff0;
+}
+
+Navigator > Button {
+    
+}

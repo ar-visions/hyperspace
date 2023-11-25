@@ -63,6 +63,43 @@ struct Head {
 /// bottom bar with audio
 /// main view (VideoView)
 
+
+/// buttons inside here
+struct Navigator:Element {
+    
+    enums(Nav, annotate,
+        annotate, record, browse);
+
+    struct props {
+        array<Nav> buttons;
+
+        properties meta() {
+            return {
+                prop { "buttons", buttons  }
+            };
+        }
+
+        type_register(props);
+    };
+
+    component(Navigator, Element, props);
+
+    void on_select(event e) {
+        printf("selected\n");
+    }
+
+    node update() {
+        return node::each<Nav>(state->buttons, [&](Nav &button_type) -> node {
+            symbol s_type = button_type.symbol();
+            return Button {
+                { "id",         s_type },
+                { "behavior",   Button::Behavior::radio },
+                { "on-select",  callback(this, &Navigator::on_select) }
+            };
+        });
+    }
+};
+
 struct VideoView:Element {
     struct props {
         float       angle;
@@ -224,10 +261,10 @@ struct VideoView:Element {
         //head->orient = head->orient * additional_rotation;
 
         array<glm::vec3> face_box = {
-            glm::vec3(-w, -h,  -d), glm::vec3( w, -h, -d), // EF
-            glm::vec3( w, -h,  -d), glm::vec3( w,  h, -d), // FG
-            glm::vec3( w,  h,  -d), glm::vec3(-w,  h, -d), // GH
-            glm::vec3(-w,  h,  -d), glm::vec3(-w, -h, -d)  // HE
+            glm::vec3(-w, -h, -d), glm::vec3( w, -h, -d), // EF
+            glm::vec3( w, -h, -d), glm::vec3( w,  h, -d), // FG
+            glm::vec3( w,  h, -d), glm::vec3(-w,  h, -d), // GH
+            glm::vec3(-w,  h, -d), glm::vec3(-w, -h, -d)  // HE
         };
  
         glm::vec3 eye = glm::vec3(0.0f, 0.0f, 0.0f);
@@ -340,8 +377,12 @@ struct Annotate:Element {
     node update() {
         Head *head = &state->head;
         return array<node> {
+            Navigator {
+                { "id",         "navigator" },
+                { "buttons",    array<Navigator::Nav> { Navigator::Nav::annotate } }
+            },
             VideoView {
-                { "id", "video-view" }
+                { "id",         "video-view" }
             }
         };
     }
