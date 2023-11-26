@@ -382,7 +382,7 @@ struct Annotate:Element {
         return array<node> {
             Navigator {
                 { "id",         "navigator" },
-                { "buttons",    array<Navigator::Nav> { Navigator::Nav::annotate } }
+                { "buttons",    array<Navigator::Nav> { "annotate" } }
             },
             VideoView {
                 { "id",         "video-view" }
