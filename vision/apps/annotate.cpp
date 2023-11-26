@@ -162,7 +162,7 @@ struct VideoView:Element {
         ndc.y = 1.0f - (2.0f * state->last_xy.y) / state->sz.y;
 
         glm::vec4 rayClip = glm::vec4(ndc.x, ndc.y, -1.0f, 1.0f);
-        glm::vec4 rayEye = glm::inverse(state->proj) * rayClip;
+        glm::vec4 rayEye  = glm::inverse(state->proj) * rayClip;
         rayEye = glm::vec4(rayEye.x, rayEye.y, -1.0f, 0.0f);
 
         glm::vec3 rayWor = glm::normalize(glm::vec3(glm::inverse(state->view) * rayEye));
@@ -251,6 +251,9 @@ struct VideoView:Element {
     }
 
     void draw(Canvas& canvas) {
+        /// the base method calculates all of the rectangular regions; its done in draw because canvas context is needed for measurement
+        Element::draw(canvas);
+
         Head *head = context<Head>("head");
         float w = head->width  / 2.0f;
         float h = head->height / 2.0f;

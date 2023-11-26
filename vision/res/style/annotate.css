@@ -1,18 +1,19 @@
 
 VideoView {
-    fill-color: #f0f;
+    area: l80 t0 r0 b0;
+    fill-color: #00f;
     sample:22;
 }
 
 Annotate {
-    child-area: l80 t0 r0 b0; 
+    area: l0 t0 r0 b0;
 }
 
 Navigator {
-    fill-area: l-80 t0 l80 b0;
+    area: l0 t0 w80 b0;
     fill-color: #ff0;
 }
 
-Navigator > Button {
-    
+Button {
+    area: l20 t20 r-20 h40;
 }
