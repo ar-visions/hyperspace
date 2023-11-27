@@ -7,6 +7,7 @@ cpp(20)
 
 # Linux:
 # sudo apt install libavcodec-dev libavformat-dev libavutil-dev libswscale-dev libavfilter-dev libswresample-dev
+# -dbg or -dbgsymbol dont seem to work, and the stackoverflow page regarding its solution does not work
 
 # Windows:
 # mingw64 > pacman -S mingw-w64-x86_64-ffmpeg
@@ -15,6 +16,11 @@ cpp(20)
 
 # macOS:
 # brew install ffmpeg
+
 cxxflags(+-Wno-deprecated-declarations)
+
+if (APPLE)
+    includes(/opt/homebrew/Cellar/ffmpeg/6.0_1/include/)
+endif()
 
 dep(libavcodec libavformat libavutil libswscale libavfilter libswresample)

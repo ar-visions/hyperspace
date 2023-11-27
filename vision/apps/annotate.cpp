@@ -3,7 +3,7 @@
 
 #include <ux/app.hpp>
 #include <math/math.hpp>
-#include <media/camera-win.hpp>
+#include <media/camera.hpp>
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_access.hpp>
 #include <glm/gtc/matrix_transform.hpp>
@@ -88,20 +88,13 @@ struct iVideo {
     }
 
     void start(path &output) {
-        static bool init;
-        if (!init) {
-            // Initialize FFmpeg and register codecs
-            av_register_all();
-            init = true;
-        }
-        
         // 1. Allocate format context and set format
         avformat_alloc_output_context2(&format_ctx, NULL, NULL, output.cs());
         assert(format_ctx);
 
         int      ret, i;
 
-        audio_codec  = avcodec_find_encoder(AV_CODEC_ID_AAC); // You can use "aac" for AAC encoding
+        audio_codec  = (AVCodec *)avcodec_find_encoder(AV_CODEC_ID_AAC); // You can use "aac" for AAC encoding
         audio_st     = avformat_new_stream(format_ctx, audio_codec);
 
         // Set audio parameters (sample format, sample rate, channel layout, etc.)
@@ -128,7 +121,7 @@ struct iVideo {
         assert (avcodec_open2(audio_ctx, audio_codec, NULL) >= 0);
 
         // 2. Find and open video codec
-        video_codec = avcodec_find_encoder(AV_CODEC_ID_H264);
+        video_codec = (AVCodec*)avcodec_find_encoder(AV_CODEC_ID_H264);
 
         video_st    = avformat_new_stream(format_ctx, video_codec);
         video_st->codecpar->codec_id = video_codec->id;
