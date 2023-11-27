@@ -11,6 +11,11 @@
 #include <glm/gtx/quaternion.hpp>
 #include <glm/gtc/random.hpp>
 
+#include <libavcodec/avcodec.h>
+#include <libavformat/avformat.h>
+#include <libswscale/swscale.h>
+#include <libavutil/imgutils.h>
+
 using namespace ion;
 
 /// the head visor model is pretty basic to describe:
@@ -391,7 +396,166 @@ struct Annotate:Element {
     }
 };
 
+void encode(AVCodecContext *enc_ctx, AVFrame *frame, AVPacket *pkt, AVFormatContext *format_ctx) {
+    int ret;
+
+    // Send the frame for encoding
+    ret = avcodec_send_frame(enc_ctx, frame);
+    if (ret < 0) {
+        // Handle error
+        exit(1);
+    }
+
+    // Receive the encoded frame
+    while (ret >= 0) {
+        ret = avcodec_receive_packet(enc_ctx, pkt);
+        if (ret == AVERROR(EAGAIN) || ret == AVERROR_EOF)
+            return;
+        else if (ret < 0) {
+            // Handle error
+            exit(1);
+        }
+
+        // Write the compressed frame to the media file
+        av_interleaved_write_frame(format_ctx, pkt);
+        av_packet_unref(pkt);
+    }
+}
+
+int main2() {
+    // Initialize FFmpeg and register codecs
+    av_register_all();
+
+    AVFormatContext *format_ctx = NULL;
+    AVStream *video_st = NULL, *audio_st = NULL;
+    AVCodecContext *video_ctx = NULL, *audio_ctx = NULL;
+    AVCodec *video_codec = NULL, *audio_codec = NULL;
+    AVFrame *frame = NULL;
+    AVPacket *pkt = NULL;
+    struct SwsContext *sws_ctx = NULL;
+
+    int ret, i;
+    int width = 1920, height = 1080;
+    int num_frames = 100; // Number of frames in your video
+    uint8_t *images[num_frames]; // Array of your images
+    uint8_t *audio_buffers[num_frames]; // Array of your audio buffers
+    int audio_sample_rate = 48000;
+    int audio_channels = 2;
+
+    // 1. Allocate format context and set format
+    avformat_alloc_output_context2(&format_ctx, NULL, NULL, "output.mp4");
+    if (!format_ctx) {
+        // Handle error
+        exit(1);
+    }
+
+    // 2. Find and open video codec
+    video_codec = avcodec_find_encoder(AV_CODEC_ID_H264);
+    if (!video_codec) {
+        // Handle error
+        exit(1);
+    }
+
+    video_st = avformat_new_stream(format_ctx, video_codec);
+    if (!video_st) {
+        // Handle error
+        exit(1);
+    }
+
+    video_ctx = avcodec_alloc_context3(video_codec);
+    if (!video_ctx) {
+        // Handle error
+        exit(1);
+    }
+
+    video_ctx->codec_id = video_codec->id;
+    video_ctx->bit_rate = 400000; // Adjust as needed
+    video_ctx->width = width;
+    video_ctx->height = height;
+    video_ctx->time_base = (AVRational){1, 25}; // Adjust frame rate as needed
+    video_ctx->framerate = (AVRational){25, 1}; // Adjust frame rate as needed
+    video_ctx->gop_size = 10; // Adjust as needed
+    video_ctx->max_b_frames = 1; // Adjust as needed
+    video_ctx->pix_fmt = AV_PIX_FMT_YUV420P;
+
+    if (avcodec_open2(video_ctx, video_codec, NULL) < 0) {
+        // Handle error
+        exit(1);
+    }
+
+    // 3. Find and open audio codec (similar to video codec setup)
+    // ...
+
+    // 4. Allocate frame and packet
+    frame = av_frame_alloc();
+    if (!frame) {
+        // Handle error
+        exit(1);
+    }
+
+    frame->format = video_ctx->pix_fmt;
+    frame->width = video_ctx->width;
+    frame->height = video_ctx->height;
+
+    pkt = av_packet_alloc();
+    if (!pkt) {
+        // Handle error
+        exit(1);
+    }
+
+    // 5. Allocate image buffer for the frame
+    ret = av_image_alloc(frame->data, frame->linesize, width, height, video_ctx->pix_fmt, 32);
+    if (ret < 0) {
+        // Handle error
+        exit(1);
+    }
+
+    // 6. Initialize sws context for frame conversion
+    sws_ctx = sws_getContext(width, height, AV_PIX_FMT_RGBA, width, height, AV_PIX_FMT_YUV420P, SWS_BILINEAR, NULL, NULL, NULL);
+    if (!sws_ctx) {
+        // Handle error
+        exit(1);
+    }
+
+    // 7. Write header
+    assert(avformat_write_header(format_ctx, NULL) == 0);
+
+    // 8. Encoding loop
+    for (i = 0; i < num_frames; i++) {
+        // Convert RGBA image to YUV420P
+        const uint8_t *inData[1] = {images[i]}; // RGBA
+        int inLinesize[1] = {4 * width}; // RGBA stride
+        sws_scale(sws_ctx, inData, inLinesize, 0, height, frame->data, frame->linesize);
+
+        // Encode video frame
+        frame->pts = i;
+        encode(video_ctx, frame, pkt, format_ctx);
+
+        // Encode audio frame
+        // ...
+    }
+
+    // 9. Flush encoders
+    encode(video_ctx, NULL, pkt, format_ctx);
+    // Flush audio encoder
+    // ...
+
+    // 10. Write trailer and clean up
+    av_write_trailer(format_ctx);
+    avcodec_free_context(&video_ctx);
+    av_frame_free(&frame);
+    av_packet_free(&pkt);
+    sws_freeContext(sws_ctx);
+    avformat_free_context(format_ctx);
+
+    return 0;
+}
+
+
 int main(int argc, char *argv[]) {
+    
+    //main2();
+
     map<mx> defs  {{ "debug", uri { null }}};
     map<mx> config { args::parse(argc, argv, defs) };
     if    (!config) return args::defaults(defs);

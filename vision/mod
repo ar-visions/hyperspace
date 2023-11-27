@@ -2,3 +2,19 @@ dep(mx:mx ion:net ion:ux ion:media @Vulkan)
 
 includes(${EXTERN_DIR}/FastNoiseLite/Cpp)
 cpp(20)
+
+# FFmpeg is not yet integrated into prefix build, as the Windows process requires mingw64
+
+# Linux:
+# sudo apt install libavcodec-dev libavformat-dev libavutil-dev libswscale-dev libavfilter-dev libswresample-dev
+
+# Windows:
+# mingw64 > pacman -S mingw-w64-x86_64-ffmpeg
+# pacman -Ql mingw-w64-x86_64-ffmpeg
+# copy files to prefix install for include and lib (todo: prefix should attempt to find via .a on windows)
+
+# macOS:
+# brew install ffmpeg
+cxxflags(+-Wno-deprecated-declarations)
+
+dep(avcodec avformat avutil swscale avfilter swresample)
