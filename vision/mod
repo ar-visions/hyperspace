@@ -17,4 +17,4 @@ cpp(20)
 # brew install ffmpeg
 cxxflags(+-Wno-deprecated-declarations)
 
-dep(avcodec avformat avutil swscale avfilter swresample)
+dep(libavcodec libavformat libavutil libswscale libavfilter libswresample)
