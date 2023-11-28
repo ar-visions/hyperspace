@@ -3,24 +3,16 @@ dep(mx:mx ion:net ion:ux ion:media @Vulkan)
 includes(${EXTERN_DIR}/FastNoiseLite/Cpp)
 cpp(20)
 
-# FFmpeg is not yet integrated into prefix build, as the Windows process requires mingw64
-
-# Linux:
-# sudo apt install libavcodec-dev libavformat-dev libavutil-dev libswscale-dev libavfilter-dev libswresample-dev
-# -dbg or -dbgsymbol dont seem to work, and the stackoverflow page regarding its solution does not work
-
 # Windows:
-# mingw64 > pacman -S mingw-w64-x86_64-ffmpeg
+# mingw64 > pacman -S mingw-w64-x86_64-ffmpeg mingw-binutils mingw-w64-tools
+# 
+# install process would be to use convert tool in libtool from mingw to our prefix path
+# libmingw-w64-convert -s static libavformat.a libavformat.lib
+
 # pacman -Ql mingw-w64-x86_64-ffmpeg
 # copy files to prefix install for include and lib (todo: prefix should attempt to find via .a on windows)
 
-# macOS:
-# brew install ffmpeg
 
 cxxflags(+-Wno-deprecated-declarations)
 
-if (APPLE)
-    includes(/opt/homebrew/Cellar/ffmpeg/6.0_1/include/)
-endif()
-
-dep(libavcodec libavformat libavutil libswscale libavfilter libswresample)
+dep(FFmpeg:avcodec FFmpeg:avformat FFmpeg:avutil FFmpeg:swscale FFmpeg:avfilter FFmpeg:swresample)
