@@ -120,7 +120,7 @@ struct VideoView:Element {
         float       scroll_scale = 0.005f;
         image       camera_image;
         bool        live = true;
-        Streams     cam;
+        MStream     cam;
         //Video       video;
 
         properties meta() {
