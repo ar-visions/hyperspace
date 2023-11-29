@@ -1,18 +1,6 @@
 dep(mx:mx ion:net ion:ux ion:media @Vulkan)
-
 includes(${EXTERN_DIR}/FastNoiseLite/Cpp)
 cpp(20)
-
-# Windows:
-# mingw64 > pacman -S mingw-w64-x86_64-ffmpeg mingw-binutils mingw-w64-tools
-# 
-# install process would be to use convert tool in libtool from mingw to our prefix path
-# libmingw-w64-convert -s static libavformat.a libavformat.lib
-
-# pacman -Ql mingw-w64-x86_64-ffmpeg
-# copy files to prefix install for include and lib (todo: prefix should attempt to find via .a on windows)
-
-
-cxxflags(+-Wno-deprecated-declarations)
-
-dep(FFmpeg:avcodec FFmpeg:avformat FFmpeg:avutil FFmpeg:swscale FFmpeg:avfilter FFmpeg:swresample)
+if(NOT WIN32)
+    cxxflags(+-Wno-deprecated-declarations)
+endif()
