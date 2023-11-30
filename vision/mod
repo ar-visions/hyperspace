@@ -1,4 +1,4 @@
-dep(mx:mx ion:net ion:ux ion:media @Vulkan)
+dep(mx:mx ion:net ion:ux ion:media mp4v2:mp4v2 fdk-aac:fdk-aac @Vulkan)
 includes(${EXTERN_DIR}/FastNoiseLite/Cpp)
 cpp(20)
 if(NOT WIN32)

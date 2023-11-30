@@ -3,7 +3,7 @@
 
 #include <ux/app.hpp>
 #include <math/math.hpp>
-#include <media/h264.hpp>
+#include <media/video.hpp>
 #include <media/camera.hpp>
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_access.hpp>
@@ -121,7 +121,7 @@ struct VideoView:Element {
         image       camera_image;
         bool        live = true;
         MStream     cam;
-        //Video       video;
+        Video       video;
 
         properties meta() {
             return {
@@ -144,7 +144,7 @@ struct VideoView:Element {
                 "Logi", "PnP", 640, 360
             );
             state->cam.listen({ this, &VideoView::on_frame });
-            //state->video = Video(640, 360, 30, 48000, "/home/kalen/test.mkv");
+            state->video = Video(640, 360, 30, 48000, "/home/kalen/test.mp4");
         }
     }
 
