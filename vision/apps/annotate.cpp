@@ -150,7 +150,7 @@ struct VideoView:Element {
 
     void on_frame(Frame &frame) {
         state->camera_image = frame.image;
-        //state->video.write_frame(frame);
+        state->video.write_frame(frame);
     }
 
     void down() {
