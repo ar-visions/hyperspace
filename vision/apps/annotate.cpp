@@ -122,6 +122,7 @@ struct VideoView:Element {
         bool        live = true;
         MStream     cam;
         Video       video;
+        int         frames;
 
         properties meta() {
             return {
@@ -149,8 +150,19 @@ struct VideoView:Element {
     }
 
     void on_frame(Frame &frame) {
-        state->camera_image = frame.image;
-        state->video.write_frame(frame);
+        
+        //state->camera_image = frame.image;
+        printf("frames: %d\n", state->frames);
+  
+        if (state->frames < 30 * 22) {
+            state->frames++;
+            state->video.write_frame(frame);
+            if (state->frames == 30 * 22) {
+                state->video.stop(); /// should make the mp4 readable?
+                exit(0);
+            }
+        }
+
     }
 
     void down() {
@@ -289,7 +301,6 @@ struct VideoView:Element {
         proj[1][1] *= -1;
 
         state->sz = sz;
-        printf("sample = %d\n", state->sample);
 
         glm::mat4 view  = glm::lookAt(eye, glm::vec3(0.0f, 0.0f, 1.0f), glm::vec3(0.0f, 1.0f, 0.0f));
         glm::mat4 model = glm::translate(glm::mat4(1.0f), head->pos) * glm::toMat4(head->orient); // glm::rotate(glm::mat4(1.0f), angle, glm::vec3(0.0f, 1.0f, 0.0f));
