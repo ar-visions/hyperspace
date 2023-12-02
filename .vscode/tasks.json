@@ -20,7 +20,7 @@
 			"isBackground": false,
 			"problemMatcher": ["$gcc"],
             "windows": {
-                "command": "msbuild hyperspace.sln /t:annotate"
+                "command": "msbuild hyperspace.sln /t:annotate /p:Configuration=Debug"
             },
             "osx": {
                 "command": "make annotate -j16"

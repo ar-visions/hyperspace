@@ -142,27 +142,26 @@ struct VideoView:Element {
             state->cam = camera(
                 { StreamType::Audio, StreamType::Video, StreamType::Image }, /// ::Image resolves the Image from the encoded Video data
                 { Media::PCM, Media::PCMf32, Media::YUY2, Media::NV12, Media::MJPEG },
-                "Logi", "PnP", 640, 360
+                "BRIO", "BRIO", 640, 360
             );
             state->cam.listen({ this, &VideoView::on_frame });
-            state->video = Video(640, 360, 30, 48000, "/home/kalen/test.mp4");
+            state->video = Video(640, 360, 30, 48000, "/Users/kalen/test.mp4");
         }
     }
 
     void on_frame(Frame &frame) {
+        state->camera_image = frame.image;
+        //printf("frames: %d\n", state->frames);
+        //fflush(stdout);
         
-        //state->camera_image = frame.image;
-        printf("frames: %d\n", state->frames);
-  
-        if (state->frames < 30 * 22) {
+        if (state->frames < 10 * 22) {
             state->frames++;
             state->video.write_frame(frame);
-            if (state->frames == 30 * 22) {
-                state->video.stop(); /// should make the mp4 readable?
-                exit(0);
+            if (state->frames == 10 * 22) {
+                state->video.stop();
+                state->cam.cancel();
             }
         }
-
     }
 
     void down() {
@@ -407,6 +406,22 @@ struct Annotate:Element {
 };
 
 int main(int argc, char *argv[]) {
+
+    MStream cam = camera(
+        { StreamType::Video, StreamType::Image }, /// ::Image resolves the Image from the encoded Video data
+        { Media::PCM, Media::PCMf32, Media::YUY2, Media::NV12, Media::MJPEG },
+        "BRIO", "BRIO", 640, 360
+    );
+    
+    lambda<void(Frame&)> on_frame = [](Frame &frame) {
+    };
+
+    cam.listen(on_frame);
+
+    for (;;) {
+        usleep(1000000);
+    }
+
     map<mx> defs  {{ "debug", uri { null }}};
     map<mx> config { args::parse(argc, argv, defs) };
     if    (!config) return args::defaults(defs);
