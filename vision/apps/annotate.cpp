@@ -145,6 +145,8 @@ struct VideoView:Element {
                 "BRIO", "BRIO", 640, 360
             );
             state->cam.listen({ this, &VideoView::on_frame });
+            
+            /// this must spawn a thread at 30hz to poll the current frame
             state->video = Video(640, 360, 30, 48000, "/Users/kalen/test.mp4");
         }
     }
@@ -406,22 +408,6 @@ struct Annotate:Element {
 };
 
 int main(int argc, char *argv[]) {
-
-    MStream cam = camera(
-        { StreamType::Video, StreamType::Image }, /// ::Image resolves the Image from the encoded Video data
-        { Media::PCM, Media::PCMf32, Media::YUY2, Media::NV12, Media::MJPEG },
-        "BRIO", "BRIO", 640, 360
-    );
-    
-    lambda<void(Frame&)> on_frame = [](Frame &frame) {
-    };
-
-    cam.listen(on_frame);
-
-    for (;;) {
-        usleep(1000000);
-    }
-
     map<mx> defs  {{ "debug", uri { null }}};
     map<mx> config { args::parse(argc, argv, defs) };
     if    (!config) return args::defaults(defs);
