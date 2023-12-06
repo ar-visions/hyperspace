@@ -153,13 +153,13 @@ struct VideoView:Element {
 
     void on_frame(Frame &frame) {
         state->camera_image = frame.image;
-        //printf("frames: %d\n", state->frames);
-        //fflush(stdout);
-        
-        if (state->frames < 10 * 22) {
+
+        if (state->frames < 10 * 22 * 1) {
+            printf("camera frame received, frames: %d\n", state->frames);
+            fflush(stdout);
             state->frames++;
             state->video.write_frame(frame);
-            if (state->frames == 10 * 22) {
+            if (state->frames == 10 * 22 * 1) {
                 state->video.stop();
                 state->cam.cancel();
             }
