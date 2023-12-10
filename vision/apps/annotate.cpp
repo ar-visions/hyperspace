@@ -142,12 +142,12 @@ struct VideoView:Element {
             state->cam = camera(
                 { StreamType::Audio, StreamType::Video, StreamType::Image }, /// ::Image resolves the Image from the encoded Video data
                 { Media::PCM, Media::PCMf32, Media::YUY2, Media::NV12, Media::MJPEG },
-                "BRIO", "BRIO", 640, 360
+                "Logi", "PnP", 640, 360
             );
             state->cam.listen({ this, &VideoView::on_frame });
             
             /// this must spawn a thread at 30hz to poll the current frame
-            state->video = Video(640, 360, 30, 48000, "/Users/kalen/test.mp4");
+            state->video = Video(640, 360, 30, 48000, "/home/kalen/test.mp4");
         }
     }
 
