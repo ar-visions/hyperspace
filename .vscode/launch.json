@@ -5,6 +5,30 @@
     "version": "0.2.0",
     "configurations": [
         {
+            "name": "h264-test",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/../hyperspace/build/h264-test",
+            "args": [],
+            "stopAtEntry": false,
+            "cwd": "${workspaceFolder}/../hyperspace/build",
+            "environment": [],
+            "MIMode": "gdb",
+            "presentation": {
+                "hidden": false,
+                "group": "",
+                "order": 1,
+            },
+            "windows":{
+                "type": "cppvsdbg",
+                "program": "${workspaceFolder}/../hyperspace/build/Debug/annotate",
+                "cwd": "${workspaceFolder}/../hyperspace/build"
+            },
+            "osx": {
+                "MIMode": "lldb"
+            }
+        },
+        {
             "name": "vision annotate",
             "type": "cppdbg",
             "request": "launch",
