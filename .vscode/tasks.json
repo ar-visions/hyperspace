@@ -2,6 +2,37 @@
 	"version": "2.0.0",
 	"tasks": [
         {
+            "label": "build-mp4-test",
+            "type": "shell",
+			"options": {
+                "cwd": "${workspaceFolder}/../hyperspace/build"
+            },
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared",
+                "group": "build0",
+                "clear": true
+            },
+			"isBackground": false,
+			"problemMatcher": ["$gcc"],
+            "windows": {
+                "command": "msbuild hyperspace.sln /t:mp4-test /p:Configuration=Debug"
+            },
+            "osx": {
+                "command": "make mp4-test -j16"
+            },
+            "linux": {
+                "command": "make mp4-test -j16",
+                "options":{
+                    "env":{"VERBOSE":"1"}
+                }
+            }
+        },
+        {
             "label": "build-h264-test",
             "type": "shell",
 			"options": {
