@@ -155,8 +155,8 @@ struct VideoView:Element {
         
         if (state->frames < 30 * 10) {
             state->camera_image = frame.image;
-            printf("camera frame received, frames: %d\n", state->frames);
-            fflush(stdout);
+            //printf("camera frame received, frames: %d\n", state->frames);
+            //fflush(stdout);
             state->frames++;
             state->video.write_frame(frame);
             if (state->frames == 30 * 10) {
