@@ -147,7 +147,7 @@ struct VideoView:Element {
             state->cam.listen({ this, &VideoView::on_frame });
             
             /// this must spawn a thread at 30hz to poll the current frame
-            state->video = Video(640, 360, 30, 48000, "/home/kalen/test.mp4");
+            state->video = Video(640, 360, 30, 48000, "test.mp4");
         }
     }
 
