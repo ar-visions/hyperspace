@@ -152,7 +152,6 @@ struct VideoView:Element {
     }
 
     void on_frame(Frame &frame) {
-        
         if (state->frames < 30 * 10) {
             state->camera_image = frame.image;
             //printf("camera frame received, frames: %d\n", state->frames);
@@ -270,6 +269,7 @@ struct VideoView:Element {
     void draw(Canvas& canvas) {
         /// the base method calculates all of the rectangular regions; its done in draw because canvas context is needed for measurement
         Element::draw(canvas);
+        return;
 
         Head *head = context<Head>("head");
         float w = head->width  / 2.0f;
@@ -408,6 +408,35 @@ struct Annotate:Element {
 };
 
 int main(int argc, char *argv[]) {
+
+    int frames = 0;
+
+    MStream cam = camera(
+        { StreamType::Audio, StreamType::Video, StreamType::Image }, /// ::Image resolves the Image from the encoded Video data
+        { Media::PCM, Media::PCMf32, Media::YUY2, Media::NV12, Media::MJPEG },
+        "Logi", "PnP", 640, 360
+    );
+
+    Video video = Video(640, 360, 30, 48000, "test.mp4");
+
+    auto on_frame = lambda<void(Frame&)>([&](Frame &frame) {
+        if (frames < 30 * 10) {
+            frames++;
+            video.write_frame(frame);
+            if (frames == 30 * 10) {
+                video.stop();
+                cam.cancel();
+            }
+        }
+    });
+
+    cam.listen(on_frame);
+        
+    while (true) {
+        usleep(1000000);
+    }
+
+    return 0;
     map<mx> defs  {{ "debug", uri { null }}};
     map<mx> config { args::parse(argc, argv, defs) };
     if    (!config) return args::defaults(defs);
