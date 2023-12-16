@@ -147,20 +147,20 @@ struct VideoView:Element {
             state->cam.listen({ this, &VideoView::on_frame });
             
             /// this must spawn a thread at 30hz to poll the current frame
-            state->video = Video(640, 360, 30, 48000, "test.mp4");
+            //state->video = Video(640, 360, 30, 48000, "test.mp4");
         }
     }
 
     void on_frame(Frame &frame) {
-        if (state->frames < 30 * 10) {
-            state->camera_image = frame.image;
-            //printf("camera frame received, frames: %d\n", state->frames);
-            //fflush(stdout);
-            state->frames++;
-            state->video.write_frame(frame);
-            if (state->frames == 30 * 10) {
-                state->video.stop();
-                state->cam.cancel();
+        state->camera_image = frame.image;
+        if (state->video) {
+            if (state->frames < 30 * 10) {
+                state->frames++;
+                state->video.write_frame(frame);
+                if (state->frames == 30 * 10) {
+                    state->video.stop();
+                    state->cam.cancel();
+                }
             }
         }
     }
@@ -269,7 +269,6 @@ struct VideoView:Element {
     void draw(Canvas& canvas) {
         /// the base method calculates all of the rectangular regions; its done in draw because canvas context is needed for measurement
         Element::draw(canvas);
-        return;
 
         Head *head = context<Head>("head");
         float w = head->width  / 2.0f;
@@ -408,7 +407,7 @@ struct Annotate:Element {
 };
 
 int main(int argc, char *argv[]) {
-
+    /*
     int frames = 0;
 
     MStream cam = camera(
@@ -436,7 +435,7 @@ int main(int argc, char *argv[]) {
         usleep(1000000);
     }
 
-    return 0;
+    return 0;*/
     map<mx> defs  {{ "debug", uri { null }}};
     map<mx> config { args::parse(argc, argv, defs) };
     if    (!config) return args::defaults(defs);
