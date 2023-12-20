@@ -105,8 +105,6 @@ struct VideoView:Element {
     struct props {
         float       angle;
         float       z_near, z_far;
-        int         sample;
-        int         sample2;
         callback    clicked;
         vec2d       last_xy;
         bool        swirl;
@@ -127,8 +125,7 @@ struct VideoView:Element {
         properties meta() {
             return {
                 prop { "live",    live    },
-                prop { "clicked", clicked },
-                prop { "sample",  sample  },
+                prop { "clicked", clicked }
             };
         }
 
@@ -146,7 +143,6 @@ struct VideoView:Element {
             );
             state->cam.listen({ this, &VideoView::on_frame });
             
-            /// this must spawn a thread at 30hz to poll the current frame
             //state->video = Video(640, 360, 30, 48000, "test.mp4");
         }
     }
@@ -294,9 +290,11 @@ struct VideoView:Element {
         state->z_near = 0.0575f / 2.0f * sin(radians(45.0f));
         state->z_far  = 10.0f;
 
-        float cw = canvas.get_virtual_width();
-        float ch = canvas.get_virtual_height();
-        glm::vec2 sz    = { cw, ch }; //{ Element::data->bounds.w, Element::data->bounds.h };
+        double cx = Element::data->bounds.x;
+        double cy = Element::data->bounds.y;
+        double cw = Element::data->bounds.w;
+        double ch = Element::data->bounds.h;
+        glm::vec2 sz    = { cw, ch };
         glm::mat4 proj  = glm::perspective(glm::radians(70.0f), sz.x / sz.y, state->z_near, state->z_far);
         proj[1][1] *= -1;
 
@@ -317,6 +315,8 @@ struct VideoView:Element {
         vec2d     offset { 0.0, 0.0 };
         alignment align  { 0.5, 0.5 };
 
+        //vec2d xy = { cx, cy };
+        //canvas.translate(xy);
         canvas.color(Element::data->drawings[operation::fill].color);
         canvas.fill(bounds);
 
@@ -396,46 +396,17 @@ struct Annotate:Element {
         Head *head = &state->head;
         return array<node> {
             Navigator {
-                { "id",         "navigator" },
+                { "id",        "navigator" },
                 { "buttons",    array<Navigator::Nav> { "annotate" } }
             },
             VideoView {
-                { "id",         "video-view" }
+                { "id",        "video-view" }
             }
         };
     }
 };
 
 int main(int argc, char *argv[]) {
-    /*
-    int frames = 0;
-
-    MStream cam = camera(
-        { StreamType::Audio, StreamType::Video, StreamType::Image }, /// ::Image resolves the Image from the encoded Video data
-        { Media::PCM, Media::PCMf32, Media::YUY2, Media::NV12, Media::MJPEG },
-        "Logi", "PnP", 640, 360
-    );
-
-    Video video = Video(640, 360, 30, 48000, "test.mp4");
-
-    auto on_frame = lambda<void(Frame&)>([&](Frame &frame) {
-        if (frames < 30 * 10) {
-            frames++;
-            video.write_frame(frame);
-            if (frames == 30 * 10) {
-                video.stop();
-                cam.cancel();
-            }
-        }
-    });
-
-    cam.listen(on_frame);
-        
-    while (true) {
-        usleep(1000000);
-    }
-
-    return 0;*/
     map<mx> defs  {{ "debug", uri { null }}};
     map<mx> config { args::parse(argc, argv, defs) };
     if    (!config) return args::defaults(defs);
