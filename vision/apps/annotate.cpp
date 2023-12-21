@@ -1,6 +1,11 @@
 /// ux apps are both gfx and 3D context.  the 3D background can be reality or a game or a picture of both.
 /// integration of 3D into Element
 
+extern "C" {
+#include <windows.h>
+#include <mmeapi.h>
+}
+
 #include <ux/app.hpp>
 #include <math/math.hpp>
 #include <media/video.hpp>
@@ -143,7 +148,7 @@ struct VideoView:Element {
             );
             state->cam.listen({ this, &VideoView::on_frame });
             
-            //state->video = Video(640, 360, 30, 48000, "test.mp4");
+            state->video = Video(640, 360, 30, 48000, "test.mp4");
         }
     }
 
@@ -290,8 +295,6 @@ struct VideoView:Element {
         state->z_near = 0.0575f / 2.0f * sin(radians(45.0f));
         state->z_far  = 10.0f;
 
-        double cx = Element::data->bounds.x;
-        double cy = Element::data->bounds.y;
         double cw = Element::data->bounds.w;
         double ch = Element::data->bounds.h;
         glm::vec2 sz    = { cw, ch };
@@ -315,8 +318,6 @@ struct VideoView:Element {
         vec2d     offset { 0.0, 0.0 };
         alignment align  { 0.5, 0.5 };
 
-        //vec2d xy = { cx, cy };
-        //canvas.translate(xy);
         canvas.color(Element::data->drawings[operation::fill].color);
         canvas.fill(bounds);
 
@@ -406,7 +407,27 @@ struct Annotate:Element {
     }
 };
 
+void writePCMDataToFile(const short *data, size_t dataSize, const char *fileName) {
+    FILE *file = fopen(fileName, "ab");
+    fwrite(data, sizeof(short), dataSize, file);
+    fclose(file);
+}
+
 int main(int argc, char *argv[]) {
+
+    auto on_frame = [&](Frame &frame) {
+        writePCMDataToFile(frame.audio.origin<short>(), frame.audio.count() / 2, "test.pcm");
+    };
+
+    MStream cam = camera(
+        { StreamType::Audio, StreamType::Video, StreamType::Image },
+        { Media::PCM, Media::PCMf32, Media::YUY2, Media::NV12, Media::MJPEG },
+        "Logi", "PnP", 640, 360
+    );
+    cam.listen(on_frame);
+    
+    while (1) { usleep(10000); }
+
     map<mx> defs  {{ "debug", uri { null }}};
     map<mx> config { args::parse(argc, argv, defs) };
     if    (!config) return args::defaults(defs);
