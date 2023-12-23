@@ -1,11 +1,6 @@
 /// ux apps are both gfx and 3D context.  the 3D background can be reality or a game or a picture of both.
 /// integration of 3D into Element
 
-extern "C" {
-#include <windows.h>
-#include <mmeapi.h>
-}
-
 #include <ux/app.hpp>
 #include <math/math.hpp>
 #include <media/video.hpp>
@@ -57,24 +52,30 @@ struct Head {
     register(Head);
 };
 
-/// this view needs to be split up into a Frame annotator/navigator along with Head Profiler (left side)
 
-///     icon bar / view:
-///     ------------------------
-///     head config
-///     browse
-///     record
-///     train?
+/// should be self contained and contain all methods for this feature
+struct Cursor {
+    /// the types we support; a Cursor type of none or !none may change the user interface.
+    enums(Type, none, none, rubiks, cubidi);
 
-/// bottom bar with audio
-/// main view (VideoView)
+    /// set centroid and scale on the coordinates, the active range we use;
+    /// the model domain should be expanded by 20% when we infer this;
+    /// then we can scale it 80% after
 
+    /// it may be a bit useful to make the constraint a bit of a radial scale;
+    /// on a cartesian coords as given by model
+
+};
+
+/// JFM
+// feature Cursor;
+// app     Cursor;
 
 /// buttons inside here
 struct Navigator:Element {
     
     enums(Nav, annotate,
-        annotate, record, browse);
+        annotate, record, cursor_config); /// cursor selection (if any) 
 
     struct props {
         array<Nav> buttons;
@@ -106,7 +107,65 @@ struct Navigator:Element {
     }
 };
 
-struct VideoView:Element {
+/// should stretch the fft when its less columns than the width of the control
+/// love.
+struct Spectrum {
+    float frequencies[128]; /// 128 is likely the max amount of frequencies we would use
+};
+
+/// combined video seek with fft display of the audio, computed once, translated afterwards; 
+/// it can also display thumbnails which it would generate once;
+struct Seekbar:Element {
+    struct props {
+        bool display_video;
+        bool display_audio;
+        /// its a good idea to pan around as we zoom, so lets not store this here.
+        /// model: displays array of Spectrum
+        /// 
+        properties meta() {
+            return {
+                { "display_video", display_video },
+                { "display_audio", display_audio }
+            };
+        }
+
+        type_register(props);
+    };
+    component(Seekbar, Element, props);
+
+    void mounted() {
+        if (state->live) {
+            state->cam = camera(
+                { StreamType::Audio, StreamType::Video, StreamType::Image },
+                { Media::PCM, Media::PCMf32, Media::YUY2, Media::NV12, Media::MJPEG },
+                "Logi", "PnP", 640, 360
+            );
+            state->cam.listen({ this, &VideoViewer::on_frame });
+            state->video = Video(640, 360, 30, 48000, "test.mp4");
+        } else {
+            state->video = Video(ion::path("sample.mp4"));
+            state->current_image = state->video.fetch_frame(40);
+        }
+    }
+
+    void draw(Canvas &canvas) {
+        Element::draw(canvas);
+        rectd rect { 2, 2, 16, 16 };
+        canvas.color(rgbad { 1.0, 1.0, 1.0, 1.0 });
+        canvas.fill(rect);
+    }
+};
+
+struct AudioTrack:mx {
+    struct M {
+        array<Spectrum> spectrum;
+        i64 duration_millis;
+    };
+    mx_basic(AudioTrack);
+
+};
+
+struct VideoViewer:Element {
     struct props {
         float       angle;
         float       z_near, z_far;
@@ -121,11 +180,11 @@ struct VideoView:Element {
         glm::vec3   start_pos;
         glm::quat   start_orient;
         float       scroll_scale = 0.005f;
-        image       camera_image;
-        bool        live = true;
+        image       current_image;
+        bool        live = false;
         MStream     cam;
         Video       video;
-        int         frames;
+        int         frame_id; /// needs to inter-operate with pts
 
         properties meta() {
             return {
@@ -137,28 +196,32 @@ struct VideoView:Element {
         type_register(props);
     };
 
-    component(VideoView, Element, props);
+    component(VideoViewer, Element, props);
 
     void mounted() {
         if (state->live) {
             state->cam = camera(
-                { StreamType::Audio, StreamType::Video, StreamType::Image }, /// ::Image resolves the Image from the encoded Video data
+                { StreamType::Audio,
+                  StreamType::Video,
+                  StreamType::Image }, /// ::Image resolves the Image from the encoded Video data
                 { Media::PCM, Media::PCMf32, Media::YUY2, Media::NV12, Media::MJPEG },
                 "Logi", "PnP", 640, 360
             );
-            state->cam.listen({ this, &VideoView::on_frame });
-            
+            state->cam.listen({ this, &VideoViewer::on_frame });
             state->video = Video(640, 360, 30, 48000, "test.mp4");
+        } else {
+            state->video = Video(ion::path("sample.mp4"));
+            state->current_image = state->video.fetch_frame(40);
         }
     }
 
     void on_frame(Frame &frame) {
-        state->camera_image = frame.image;
+        state->current_image = frame.image;
         if (state->video) {
-            if (state->frames < 30 * 10) {
-                state->frames++;
+            if (state->frame_id < 30 * 10) {
+                state->frame_id++;
                 state->video.write_frame(frame);
-                if (state->frames == 30 * 10) {
+                if (state->frame_id == 30 * 10) {
                     state->video.stop();
                     state->cam.cancel();
                 }
@@ -321,8 +384,8 @@ struct VideoView:Element {
         canvas.color(Element::data->drawings[operation::fill].color);
         canvas.fill(bounds);
 
-        if (state->camera_image) {
-            canvas.image(state->camera_image, bounds, align, offset);  
+        if (state->current_image) {
+            canvas.image(state->current_image, bounds, align, offset);  
         }
 
         canvas.projection(model, view, proj);
@@ -352,6 +415,15 @@ struct VideoView:Element {
         float ear_h  = fh * 0.02f; /// should be a circle or a square, not a line segment
         canvas.outline_sz(1);
 
+        /// we want to replace this with a silohette on 2 axis
+        /// thats far easier to scale and line up
+        /// its not a chore to manage these points with a profile view.
+        /// its literally a profile that we measure with the model, associated to the subject in annotations
+        /// the idea of making planes is not good
+        /// top part: middle of forehead (not visible with hair, but measurable by human; basically lower middle of ballcap or something)
+        /// bottom: top of the upper lip is probably good
+        /// ability to copy and paste profiles is a good feature, from file to file
+
         array<glm::vec3> features = {
             glm::vec3(-eye_x - eye_w / 2, eye_y, -d + eye_z),
             glm::vec3(-eye_x + eye_w / 2, eye_y, -d + eye_z),
@@ -371,12 +443,86 @@ struct VideoView:Element {
 
         for (size_t i = 0; i < 10; i += 2)
             canvas.line(features[i + 0], features[i + 1]);
-
-        canvas.color(blue);
-        //glm::vec3 p = { 0.0f, 0.0f, 0.0f };
-        //canvas.arc(p, 8.0f, 0.0, radians(180.0), true);
-
+        
         canvas.restore();
+    }
+};
+
+/// its a button and it controls the main menu ops
+struct MainMenu:Element {
+    struct props {
+        bool sample;
+        type_register(props);
+    };
+
+    component(MainMenu, Element, props);
+
+    void on_click(event e) {
+        printf("main menu\n");
+    }
+
+    node update() {
+        return Button {
+            { "id",         "main-menu" },
+            { "on-click",    callback(this, &MainMenu::on_click) }
+        };
+    }
+};
+
+/// this should perform operation with alterations to tags, and subsequent style change
+/// need syntax for remaining units in coord, and it can be a % of that; i suppose % can always do this?
+/// insight: this is probably preferred since it can be reduced to be the same function it was with some heuristics
+/// 
+
+/// will be controlled in css; it holds onto 
+struct Page:Element {
+    struct props {
+        bool sample;
+    };
+    component(Page, Element, props);
+};
+
+struct Ribbon:Element {
+    struct props {
+        map<Element> content; // headers need only an 'id'-header, their selected/unselected state tag, content would have 'id'-content, selected/unselected state
+        str          selected; // we set this, its not exposed
+        type_register(props);
+    };
+
+    component(Ribbon, Element, props);
+
+    /// Elements can be called because we can grab Elements along with type-driven context properties
+    void select(str id) {
+        state->selected = id;
+    }
+
+    void on_click(event e) {
+        printf("on_click method called\n");
+    }
+
+    node update() {
+        return node::each<str, Element>(state->content, [&](str &id, Element &e) -> node {
+            str  header_id = fmt { "{0}-header",  id };
+            str content_id = fmt { "{0}-content", id };
+            str       tags = id == state->selected ? array<str> { "selected" } : {};
+            return array<node> {
+                Button {
+                    { "id",         header_id }, /// css can do the rest
+                    { "behavior",   Button::Behavior::radio },
+                    { "on-change", []() {
+                        // call update
+                    }}
+                },
+                Page {
+                    header_id.symbolize(), tags, array<node> { e }
+                }
+            }
+        });
+
+        return Button {
+            { "id", "main-menu" },
+            { "on-click", callback(this, &Ribbon::on_click) }
+        };
     }
 };
 
@@ -396,45 +542,37 @@ struct Annotate:Element {
     node update() {
         Head *head = &state->head;
         return array<node> {
-            Navigator {
-                { "id",        "navigator" },
-                { "buttons",    array<Navigator::Nav> { "annotate" } }
+            MainMenu {
+                { "id", "main-menu" }
             },
-            VideoView {
-                { "id",        "video-view" }
+            Navigator {
+                { "id", "navigator" },
+                { "buttons", array<Navigator::Nav> {
+                    Navigator::Nav("annotate"),
+                    Navigator::Nav("record"),
+                    Navigator::Nav("cursor-config") } }
+            },
+            VideoViewer {
+                { "id", "video-viewer" }
+            },
+            Seekbar {
+                {"id", "seekbar" }
             }
         };
     }
 };
 
-void writePCMDataToFile(const short *data, size_t dataSize, const char *fileName) {
-    FILE *file = fopen(fileName, "ab");
-    fwrite(data, sizeof(short), dataSize, file);
-    fclose(file);
-}
-
 int main(int argc, char *argv[]) {
-
-    auto on_frame = [&](Frame &frame) {
-        writePCMDataToFile(frame.audio.origin<short>(), frame.audio.count() / 2, "test.pcm");
-    };
-
-    MStream cam = camera(
-        { StreamType::Audio, StreamType::Video, StreamType::Image },
-        { Media::PCM, Media::PCMf32, Media::YUY2, Media::NV12, Media::MJPEG },
-        "Logi", "PnP", 640, 360
-    );
-    cam.listen(on_frame);
-    
-    while (1) { usleep(10000); }
-
     map<mx> defs  {{ "debug", uri { null }}};
     map<mx> config { args::parse(argc, argv, defs) };
     if    (!config) return args::defaults(defs);
-
+    ///
     return App(config, [](App &app) -> node {
         return Annotate {
             { "id", "main" }
         };
     });
 }
+
+/// visualize audio track
+/// seek position thumb
