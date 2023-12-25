@@ -133,19 +133,13 @@ struct Seekbar:Element {
     };
     component(Seekbar, Element, props);
 
+    
     void mounted() {
-        if (state->live) {
-            state->cam = camera(
-                { StreamType::Audio, StreamType::Video, StreamType::Image },
-                { Media::PCM, Media::PCMf32, Media::YUY2, Media::NV12, Media::MJPEG },
-                "Logi", "PnP", 640, 360
-            );
-            state->cam.listen({ this, &VideoViewer::on_frame });
-            state->video = Video(640, 360, 30, 48000, "test.mp4");
-        } else {
-            state->video = Video(ion::path("sample.mp4"));
-            state->current_image = state->video.fetch_frame(40);
-        }
+    }
+
+    node update() {
+        Head *head = context<Head>("head");
+        return Element::update();
     }
 
     void draw(Canvas &canvas) {
@@ -180,15 +174,9 @@ struct VideoViewer:Element {
         glm::vec3   start_pos;
         glm::quat   start_orient;
         float       scroll_scale = 0.005f;
-        image       current_image;
-        bool        live = false;
-        MStream     cam;
-        Video       video;
-        int         frame_id; /// needs to inter-operate with pts
 
         properties meta() {
             return {
-                prop { "live",    live    },
                 prop { "clicked", clicked }
             };
         }
@@ -197,37 +185,6 @@ struct VideoViewer:Element {
     };
 
     component(VideoViewer, Element, props);
-
-    void mounted() {
-        if (state->live) {
-            state->cam = camera(
-                { StreamType::Audio,
-                  StreamType::Video,
-                  StreamType::Image }, /// ::Image resolves the Image from the encoded Video data
-                { Media::PCM, Media::PCMf32, Media::YUY2, Media::NV12, Media::MJPEG },
-                "Logi", "PnP", 640, 360
-            );
-            state->cam.listen({ this, &VideoViewer::on_frame });
-            state->video = Video(640, 360, 30, 48000, "test.mp4");
-        } else {
-            state->video = Video(ion::path("sample.mp4"));
-            state->current_image = state->video.fetch_frame(40);
-        }
-    }
-
-    void on_frame(Frame &frame) {
-        state->current_image = frame.image;
-        if (state->video) {
-            if (state->frame_id < 30 * 10) {
-                state->frame_id++;
-                state->video.write_frame(frame);
-                if (state->frame_id == 30 * 10) {
-                    state->video.stop();
-                    state->cam.cancel();
-                }
-            }
-        }
-    }
 
     void down() {
         Head *head = context<Head>("head");
@@ -330,122 +287,7 @@ struct VideoViewer:Element {
         }
     }
 
-    void draw(Canvas& canvas) {
-        /// the base method calculates all of the rectangular regions; its done in draw because canvas context is needed for measurement
-        Element::draw(canvas);
-
-        Head *head = context<Head>("head");
-        float w = head->width  / 2.0f;
-        float h = head->height / 2.0f;
-        float d = head->depth  / 2.0f;
-
-        // test code:
-        //glm::quat additional_rotation = glm::angleAxis(radians(1.0f) / 10.0f, glm::vec3(0.0f, 1.0f, 0.0f));
-        //head->orient = head->orient * additional_rotation;
-
-        array<glm::vec3> face_box = {
-            glm::vec3(-w, -h, -d), glm::vec3( w, -h, -d), // EF
-            glm::vec3( w, -h, -d), glm::vec3( w,  h, -d), // FG
-            glm::vec3( w,  h, -d), glm::vec3(-w,  h, -d), // GH
-            glm::vec3(-w,  h, -d), glm::vec3(-w, -h, -d)  // HE
-        };
- 
-        glm::vec3 eye = glm::vec3(0.0f, 0.0f, 0.0f);
-        
-        //image img = path { "textures/rubiks.color2.png" };
-        //pipeline->textures[Asset::color].update(img); /// updating in here is possible because the next call is to check for updates to descriptor
-
-        state->z_near = 0.0575f / 2.0f * sin(radians(45.0f));
-        state->z_far  = 10.0f;
-
-        double cw = Element::data->bounds.w;
-        double ch = Element::data->bounds.h;
-        glm::vec2 sz    = { cw, ch };
-        glm::mat4 proj  = glm::perspective(glm::radians(70.0f), sz.x / sz.y, state->z_near, state->z_far);
-        proj[1][1] *= -1;
-
-        state->sz = sz;
-
-        glm::mat4 view  = glm::lookAt(eye, glm::vec3(0.0f, 0.0f, 1.0f), glm::vec3(0.0f, 1.0f, 0.0f));
-        glm::mat4 model = glm::translate(glm::mat4(1.0f), head->pos) * glm::toMat4(head->orient); // glm::rotate(glm::mat4(1.0f), angle, glm::vec3(0.0f, 1.0f, 0.0f));
-
-        static rgbad white = { 1.0, 1.0, 1.0, 1.0 };
-        static rgbad red   = { 1.0, 0.0, 0.0, 1.0 };
-        static rgbad green = { 0.0, 1.0, 0.0, 1.0 };
-        static rgbad blue  = { 0.0, 0.0, 1.0, 1.0 };
-
-        canvas.save();
-
-        /// draw webcam!
-        rectd     bounds { 0.0, 0.0, sz.x, sz.y };
-        vec2d     offset { 0.0, 0.0 };
-        alignment align  { 0.5, 0.5 };
-
-        canvas.color(Element::data->drawings[operation::fill].color);
-        canvas.fill(bounds);
-
-        if (state->current_image) {
-            canvas.image(state->current_image, bounds, align, offset);  
-        }
-
-        canvas.projection(model, view, proj);
-        canvas.outline_sz(2);
-        for (size_t i = 0; i < 4; i++)
-            canvas.line(face_box[i * 2 + 0], face_box[i * 2 + 1]);
-        
-        state->model = model;
-        state->view  = view;
-        state->proj  = proj;
-       
-        /// draw eyes
-        float fw    = head->width;
-        float fh    = head->height;
-        float eye_w = fw * head->eye_w;
-        float eye_x = fw * head->eye_x;
-        float eye_y = fw * head->eye_y;
-        float eye_z = fw * head->eye_z; /// frontal plane is the eye plane as annotated; useful to have a z offset
-        
-        float nose_x = 0.0f;
-        float nose_y = fh * head->nose_y;
-        float nose_z = fw * head->nose_z;
-        float nose_h = fh * 0.02f;
-
-        float ear_x  = fw * head->ear_x;
-        float ear_y  = fh * head->ear_y;
-        float ear_h  = fh * 0.02f; /// should be a circle or a square, not a line segment
-        canvas.outline_sz(1);
-
-        /// we want to replace this with a silohette on 2 axis
-        /// thats far easier to scale and line up
-        /// its not a chore to manage these points with a profile view.
-        /// its literally a profile that we measure with the model, associated to the subject in annotations
-        /// the idea of making planes is not good
-        /// top part: middle of forehead (not visible with hair, but measurable by human; basically lower middle of ballcap or something)
-        /// bottom: top of the upper lip is probably good
-        /// ability to copy and paste profiles is a good feature, from file to file
-
-        array<glm::vec3> features = {
-            glm::vec3(-eye_x - eye_w / 2, eye_y, -d + eye_z),
-            glm::vec3(-eye_x + eye_w / 2, eye_y, -d + eye_z),
-
-            glm::vec3( eye_x - eye_w / 2, eye_y, -d + eye_z),
-            glm::vec3( eye_x + eye_w / 2, eye_y, -d + eye_z),
-
-            glm::vec3( nose_x, nose_y,          -d - nose_z),
-            glm::vec3( nose_x, nose_y + nose_h, -d - nose_z),
-
-            glm::vec3(-w, ear_y,         d * ear_x),
-            glm::vec3(-w, ear_y + ear_h, d * ear_x), /// just for noticable length
-
-            glm::vec3(+w, ear_y,         d * ear_x),
-            glm::vec3(+w, ear_y + ear_h, d * ear_x) /// just for noticable length
-        };
-
-        for (size_t i = 0; i < 10; i += 2)
-            canvas.line(features[i + 0], features[i + 1]);
-        
-        canvas.restore();
-    }
+    void draw(Canvas& canvas);
 };
 
 /// its a button and it controls the main menu ops
@@ -504,19 +346,19 @@ struct Ribbon:Element {
         return node::each<str, Element>(state->content, [&](str &id, Element &e) -> node {
             str  header_id = fmt { "{0}-header",  id };
             str content_id = fmt { "{0}-content", id };
-            str       tags = id == state->selected ? array<str> { "selected" } : {};
+            array<str> tags = id == state->selected ? array<str> { "selected" } : array<str> {};
             return array<node> {
                 Button {
                     { "id",         header_id }, /// css can do the rest
                     { "behavior",   Button::Behavior::radio },
-                    { "on-change", []() {
+                    { "on-change",  callback([](event e) {
                         // call update
-                    }}
+                    })}
                 },
                 Page {
-                    header_id.symbolize(), tags, array<node> { e }
+                    header_id, tags, array<node> { e }
                 }
-            }
+            };
         });
 
         return Button {
@@ -526,9 +368,47 @@ struct Ribbon:Element {
     }
 };
 
+struct Content:Element {
+    struct props {
+        Head        head;
+        image       current_image;
+        bool        display_audio = false;
+        MStream     cam;
+        Video       video;
+        int         frame_id; /// needs to inter-operate with pts
+
+        properties meta() {
+            return {
+                prop { "display-audio", display_audio }
+            };
+        }
+
+        type_register(props);
+    };
+
+    component(Content, Element, props);
+
+    node update() {
+        return array<node> {
+            VideoViewer {
+                { "id", "video-viewer" }
+            },
+            state->display_audio ? Seekbar {
+                {"id", "seekbar" }
+            } : null
+        };
+    }
+};
+
 struct Annotate:Element {
     struct props {
-        Head head;
+        Head        head;
+        image       current_image;
+        bool        live = false;
+        MStream     cam;
+        Video       video;
+        int         frame_id; /// needs to inter-operate with pts
+
         properties meta() {
             return {
                 prop { "head", head }
@@ -536,11 +416,41 @@ struct Annotate:Element {
         }
         type_register(props);
     };
-    
+
     component(Annotate, Element, props);
+        
+    void mounted() {
+        if (state->live) {
+            state->cam = camera(
+                { StreamType::Audio,
+                  StreamType::Video,
+                  StreamType::Image }, /// ::Image resolves the Image from the encoded Video data
+                { Media::PCM, Media::PCMf32, Media::YUY2, Media::NV12, Media::MJPEG },
+                "Logi", "PnP", 640, 360
+            );
+            state->cam.listen({ this, &Annotate::on_frame });
+            state->video = Video(640, 360, 30, 48000, "test.mp4");
+        } else {
+            state->video = Video(ion::path("sample.mp4"));
+            state->current_image = state->video.fetch_frame(40);
+        }
+    }
+
+    void on_frame(Frame &frame) {
+        state->current_image = frame.image;
+        if (state->video) {
+            if (state->frame_id < 30 * 10) {
+                state->frame_id++;
+                state->video.write_frame(frame);
+                if (state->frame_id == 30 * 10) {
+                    state->video.stop();
+                    state->cam.cancel();
+                }
+            }
+        }
+    }
 
     node update() {
-        Head *head = &state->head;
         return array<node> {
             MainMenu {
                 { "id", "main-menu" }
@@ -552,15 +462,134 @@ struct Annotate:Element {
                     Navigator::Nav("record"),
                     Navigator::Nav("cursor-config") } }
             },
-            VideoViewer {
-                { "id", "video-viewer" }
+            Content {
+                { "id", "content" },
+                { "display-audio", state->video.is_playback() }
             },
-            Seekbar {
-                {"id", "seekbar" }
+            Ribbon {
+                { "id", "ribbon" }
             }
         };
     }
 };
+
+void VideoViewer::draw(Canvas& canvas) {
+    /// the base method calculates all of the rectangular regions; its done in draw because canvas context is needed for measurement
+    Element::draw(canvas);
+
+    Head *head = context<Head>("head");
+    float w = head->width  / 2.0f;
+    float h = head->height / 2.0f;
+    float d = head->depth  / 2.0f;
+
+    // test code:
+    //glm::quat additional_rotation = glm::angleAxis(radians(1.0f) / 10.0f, glm::vec3(0.0f, 1.0f, 0.0f));
+    //head->orient = head->orient * additional_rotation;
+
+    array<glm::vec3> face_box = {
+        glm::vec3(-w, -h, -d), glm::vec3( w, -h, -d), // EF
+        glm::vec3( w, -h, -d), glm::vec3( w,  h, -d), // FG
+        glm::vec3( w,  h, -d), glm::vec3(-w,  h, -d), // GH
+        glm::vec3(-w,  h, -d), glm::vec3(-w, -h, -d)  // HE
+    };
+
+    glm::vec3 eye = glm::vec3(0.0f, 0.0f, 0.0f);
+    
+    //image img = path { "textures/rubiks.color2.png" };
+    //pipeline->textures[Asset::color].update(img); /// updating in here is possible because the next call is to check for updates to descriptor
+
+    state->z_near = 0.0575f / 2.0f * sin(radians(45.0f));
+    state->z_far  = 10.0f;
+
+    double cw = Element::data->bounds.w;
+    double ch = Element::data->bounds.h;
+    glm::vec2 sz    = { cw, ch };
+    glm::mat4 proj  = glm::perspective(glm::radians(70.0f), sz.x / sz.y, state->z_near, state->z_far);
+    proj[1][1] *= -1;
+
+    state->sz = sz;
+
+    glm::mat4 view  = glm::lookAt(eye, glm::vec3(0.0f, 0.0f, 1.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+    glm::mat4 model = glm::translate(glm::mat4(1.0f), head->pos) * glm::toMat4(head->orient); // glm::rotate(glm::mat4(1.0f), angle, glm::vec3(0.0f, 1.0f, 0.0f));
+
+    static rgbad white = { 1.0, 1.0, 1.0, 1.0 };
+    static rgbad red   = { 1.0, 0.0, 0.0, 1.0 };
+    static rgbad green = { 0.0, 1.0, 0.0, 1.0 };
+    static rgbad blue  = { 0.0, 0.0, 1.0, 1.0 };
+
+    canvas.save();
+
+    /// draw webcam!
+    rectd     bounds { 0.0, 0.0, sz.x, sz.y };
+    vec2d     offset { 0.0, 0.0 };
+    alignment align  { 0.5, 0.5 };
+
+    canvas.color(Element::data->drawings[operation::fill].color);
+    canvas.fill(bounds);
+
+    Annotate *a = (Annotate*)node::data->parent;
+    if (a->state->current_image) {
+        canvas.image(a->state->current_image, bounds, align, offset);  
+    }
+
+    canvas.projection(model, view, proj);
+    canvas.outline_sz(2);
+    for (size_t i = 0; i < 4; i++)
+        canvas.line(face_box[i * 2 + 0], face_box[i * 2 + 1]);
+    
+    state->model = model;
+    state->view  = view;
+    state->proj  = proj;
+    
+    /// draw eyes
+    float fw    = head->width;
+    float fh    = head->height;
+    float eye_w = fw * head->eye_w;
+    float eye_x = fw * head->eye_x;
+    float eye_y = fw * head->eye_y;
+    float eye_z = fw * head->eye_z; /// frontal plane is the eye plane as annotated; useful to have a z offset
+    
+    float nose_x = 0.0f;
+    float nose_y = fh * head->nose_y;
+    float nose_z = fw * head->nose_z;
+    float nose_h = fh * 0.02f;
+
+    float ear_x  = fw * head->ear_x;
+    float ear_y  = fh * head->ear_y;
+    float ear_h  = fh * 0.02f; /// should be a circle or a square, not a line segment
+    canvas.outline_sz(1);
+
+    /// we want to replace this with a silohette on 2 axis
+    /// thats far easier to scale and line up
+    /// its not a chore to manage these points with a profile view.
+    /// its literally a profile that we measure with the model, associated to the subject in annotations
+    /// the idea of making planes is not good
+    /// top part: middle of forehead (not visible with hair, but measurable by human; basically lower middle of ballcap or something)
+    /// bottom: top of the upper lip is probably good
+    /// ability to copy and paste profiles is a good feature, from file to file
+
+    array<glm::vec3> features = {
+        glm::vec3(-eye_x - eye_w / 2, eye_y, -d + eye_z),
+        glm::vec3(-eye_x + eye_w / 2, eye_y, -d + eye_z),
+
+        glm::vec3( eye_x - eye_w / 2, eye_y, -d + eye_z),
+        glm::vec3( eye_x + eye_w / 2, eye_y, -d + eye_z),
+
+        glm::vec3( nose_x, nose_y,          -d - nose_z),
+        glm::vec3( nose_x, nose_y + nose_h, -d - nose_z),
+
+        glm::vec3(-w, ear_y,         d * ear_x),
+        glm::vec3(-w, ear_y + ear_h, d * ear_x), /// just for noticable length
+
+        glm::vec3(+w, ear_y,         d * ear_x),
+        glm::vec3(+w, ear_y + ear_h, d * ear_x) /// just for noticable length
+    };
+
+    for (size_t i = 0; i < 10; i += 2)
+        canvas.line(features[i + 0], features[i + 1]);
+    
+    canvas.restore();
+}
 
 int main(int argc, char *argv[]) {
     map<mx> defs  {{ "debug", uri { null }}};

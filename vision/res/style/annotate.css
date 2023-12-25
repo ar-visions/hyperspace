@@ -2,8 +2,6 @@ Annotate {
     area: l0 t0 r0 b0;
 }
 
-// r[id] could indicate to use a track installed in the app?
-// those could be configured separately but most likely used by the user (default would be defined atleast)
 VideoViewer {
     area: l80.5 t0 r-170 b-64;
     fill-color: #222;
@@ -11,13 +9,16 @@ VideoViewer {
     outline-sz:1;
 }
 
-// dont overdo the ui modularity with user widgetry; thats a good way to run in circles
 Ribbon {
     fill-color: #224;
     area: r-170 t0 r0 b0;
 }
 
-// useful way to use contextual types here with the rails
+Content {
+    fill-color: #f24;
+    area: l80.5 t0 r-170 b0;
+}
+
 Seekbar {
     area: l80.5 b-64 r-170 h64;
 }
