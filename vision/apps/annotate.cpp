@@ -107,12 +107,6 @@ struct Navigator:Element {
     }
 };
 
-/// should stretch the fft when its less columns than the width of the control
-/// love.
-struct Spectrum {
-    float frequencies[128]; /// 128 is likely the max amount of frequencies we would use
-};
-
 /// combined video seek with fft display of the audio, computed once, translated afterwards; 
 /// it can also display thumbnails which it would generate once;
 struct Seekbar:Element {
@@ -148,15 +142,6 @@ struct Seekbar:Element {
         canvas.color(rgbad { 1.0, 1.0, 1.0, 1.0 });
         canvas.fill(rect);
     }
-};
-
-struct AudioTrack:mx {
-    struct M {
-        array<Spectrum> spectrum;
-        i64 duration_millis;
-    };
-    mx_basic(AudioTrack);
-
 };
 
 struct VideoViewer:Element {
@@ -328,15 +313,23 @@ struct Ribbon:Element {
     struct props {
         map<Element> content; // headers need only an 'id'-header, their selected/unselected state tag, content would have 'id'-content, selected/unselected state
         str          selected; // we set this, its not exposed
+        callback     header_click;
         type_register(props);
+
+        properties meta() {
+            return {
+                {"content",  content},
+                {"selected", selected},
+                {"header-click", header_click}
+            };
+        }
     };
 
-    component(Ribbon, Element, props);
-
-    /// Elements can be called because we can grab Elements along with type-driven context properties
     void select(str id) {
-        state->selected = id;
+        state->selected = id; /// event->target->select(id);
     }
+
+    component(Ribbon, Element, props);
 
     void on_click(event e) {
         printf("on_click method called\n");
@@ -344,19 +337,25 @@ struct Ribbon:Element {
 
     node update() {
         return node::each<str, Element>(state->content, [&](str &id, Element &e) -> node {
-            str  header_id = fmt { "{0}-header",  id };
-            str content_id = fmt { "{0}-content", id };
-            array<str> tags = id == state->selected ? array<str> { "selected" } : array<str> {};
+            str  header_id = fmt {"{0}-header",  {id}};
+            str content_id = fmt {"{0}-content", {id}};
+            bool  selected = id == state->selected;
+            ///
             return array<node> {
                 Button {
                     { "id",         header_id }, /// css can do the rest
                     { "behavior",   Button::Behavior::radio },
-                    { "on-change",  callback([](event e) {
+                    { "on-change",  callback([&, id](event e) {
                         // call update
+                        state->selected = id;
+                        event ev { this };
+                        if (state->header_click)
+                            state->header_click(ev);
                     })}
                 },
                 Page {
-                    header_id, tags, array<node> { e }
+                    { "id", header_id },
+                    { "selected", selected }
                 }
             };
         });
@@ -374,7 +373,6 @@ struct Content:Element {
         image       current_image;
         bool        display_audio = false;
         MStream     cam;
-        Video       video;
         int         frame_id; /// needs to inter-operate with pts
 
         properties meta() {
@@ -393,10 +391,33 @@ struct Content:Element {
             VideoViewer {
                 { "id", "video-viewer" }
             },
-            state->display_audio ? Seekbar {
+            state->display_audio ? Seekbar { /// load all audio tracks into fft on video load; just do it everytime and Seekbar shall read from it.  it does not need to know when it changes, thats self contained in Video
                 {"id", "seekbar" }
             } : null
         };
+    }
+};
+
+struct Profile:Element {
+    struct props {
+        int sample;
+        type_register(props);
+    };
+
+    component(Profile, Element, props);
+
+    /// how do we get notified when the subject has changed?
+    /// we need to be able to annotate multiples, perhaps.. gen1 shouldnt have it, though
+    void mounted() {
+    }
+    
+    void draw(Canvas& canvas) {
+        /// lookup profile and paint it on top of a cm-grid pattern
+        rectd &bounds = Element::data->bounds;
+        Element::draw(canvas);
+        rectd area = { 0, 0, bounds.w, bounds.h };
+        canvas.color((cstr)"#f00");
+        canvas.fill(area);
     }
 };
 
@@ -411,7 +432,8 @@ struct Annotate:Element {
 
         properties meta() {
             return {
-                prop { "head", head }
+                prop { "head",  head },
+                //prop { "video", video } /// we share video and our head model with components; using context we dont need to pass them around, store them separate.  its better this way
             };
         }
         type_register(props);
@@ -467,7 +489,15 @@ struct Annotate:Element {
                 { "display-audio", state->video.is_playback() }
             },
             Ribbon {
-                { "id", "ribbon" }
+                { "id", "ribbon" },
+                {  "content", map <Element> {
+                    /// middle of forehead, down the nose (tip used for), to the top of top lip
+                    {"side-profile",    Profile {{"id", "side-profile"}}},
+                    /// shape of bottom of nose, where it starts from head, to tip
+                    /// it must be half face-based, and must mirror
+                    /// it may also extend to ear
+                    {"forward-profile", Profile {{"id", "forward-profile"}}} /// will fetch from Annotation model through Context
+                } }
             }
         };
     }
@@ -602,6 +632,3 @@ int main(int argc, char *argv[]) {
         };
     });
 }
-
-/// visualize audio track
-/// seek position thumb

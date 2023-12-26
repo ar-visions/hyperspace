@@ -3,31 +3,45 @@ Annotate {
 }
 
 VideoViewer {
-    area: l80.5 t0 r-170 b-64;
-    fill-color: #222;
-    outline-color:#fff4;
-    outline-sz:1;
+    area: l0.5 t0 r0 b-64;
+    fill-color: #111;
+}
+
+Seekbar {
+    area: l0.5 b-63 r0 b0;
+    fill-color:#111;
 }
 
 Ribbon {
     fill-color: #224;
-    area: r-170 t0 r0 b0;
+    area: r-220 t0 r0 b0;
+    outline-color:#fff2;
+    outline-sz:1;
+    outline-area:l0.5 t-1 r1 b1;
+}
+
+
+Button.side-profile-header {
+    fill-color: #444;
+    area: l0 t0+ r0 h60;
+}
+
+Profile.side-profile-content:selected {
+    fill-color: #444;
+    area: l0 t0+ r0 h60;
 }
 
 Content {
-    fill-color: #f24;
-    area: l80.5 t0 r-170 b0;
+    fill-color: #444;
+    area: l80.5 0 r-220 b0;
 }
 
-Seekbar {
-    area: l80.5 b-64 r-170 h64;
+Annotate:record > Content {
 }
 
 Navigator {
-    area: l0 t81 w79 b0;
-    fill-color: #24a4;
-    outline-sz: 0;
-    outline-color: #fff4;
+    area: l0 t81 w79.5 b0;
+    fill-color: #24a5;
 }
 
 MainMenu {
