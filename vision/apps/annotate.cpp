@@ -113,9 +113,6 @@ struct Seekbar:Element {
     struct props {
         bool display_video;
         bool display_audio;
-        /// its a good idea to pan around as we zoom, so lets not store this here.
-        /// model: displays array of Spectrum
-        /// 
         properties meta() {
             return {
                 { "display_video", display_video },
@@ -126,22 +123,16 @@ struct Seekbar:Element {
         type_register(props);
     };
     component(Seekbar, Element, props);
-
     
     void mounted() {
     }
 
     node update() {
-        Head *head = context<Head>("head");
+        Head *head = context<Head>("head"); // should allow for no field given so it finds by first type
         return Element::update();
     }
 
-    void draw(Canvas &canvas) {
-        Element::draw(canvas);
-        rectd rect { 2, 2, 16, 16 };
-        canvas.color(rgbad { 1.0, 1.0, 1.0, 1.0 });
-        canvas.fill(rect);
-    }
+    void draw(Canvas &canvas);
 };
 
 struct VideoViewer:Element {
@@ -370,7 +361,6 @@ struct Ribbon:Element {
 struct Content:Element {
     struct props {
         Head        head;
-        image       current_image;
         bool        display_audio = false;
         MStream     cam;
         int         frame_id; /// needs to inter-operate with pts
@@ -503,6 +493,21 @@ struct Annotate:Element {
     }
 };
 
+void Seekbar::draw(Canvas &canvas) {
+    Annotate *a = grab<Annotate>();
+    assert(a);
+    
+    /// cursor will interpolate from left to right based on the seek_pos / frames * render_width
+    /// behind it, the audio will shift based on a fixed amount; we want 1 pixel of fft column to always represent a constant time scale
+    /// 64 pixels being 1 second for example
+    /// its translation will shift as it plays
+    /// if the video duration is shorter than the seekbar window size, it should be centered
+    Element::draw(canvas);
+    rectd rect { 2, 2, 16, 16 };
+    canvas.color(rgbad { 1.0, 1.0, 1.0, 1.0 });
+    canvas.fill(rect);
+}
+
 void VideoViewer::draw(Canvas& canvas) {
     /// the base method calculates all of the rectangular regions; its done in draw because canvas context is needed for measurement
     Element::draw(canvas);
@@ -557,7 +562,7 @@ void VideoViewer::draw(Canvas& canvas) {
     canvas.color(Element::data->drawings[operation::fill].color);
     canvas.fill(bounds);
 
-    Annotate *a = (Annotate*)node::data->parent;
+    Annotate *a = grab<Annotate>();
     if (a->state->current_image) {
         canvas.image(a->state->current_image, bounds, align, offset);  
     }
