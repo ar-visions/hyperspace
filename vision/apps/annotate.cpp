@@ -101,7 +101,8 @@ struct Navigator:Element {
             return Button {
                 { "id",         s_type },
                 { "behavior",   Button::Behavior::radio },
-                { "on-select",  callback(this, &Navigator::on_select) }
+                { "on-select",  callback(this, &Navigator::on_select) },
+                { "test1",      true }
             };
         });
     }
@@ -109,30 +110,38 @@ struct Navigator:Element {
 
 /// combined video seek with fft display of the audio, computed once, translated afterwards; 
 /// it can also display thumbnails which it would generate once;
+
+
+/// i think its better to do Context-only properties
+/// now it may actually be useful to auto bind them to Context if they are not explicitly passed in
+///
 struct Seekbar:Element {
     struct props {
-        bool display_video;
-        bool display_audio;
+        Video *video;
         properties meta() {
             return {
-                { "display_video", display_video },
-                { "display_audio", display_audio }
             };
         }
-
         type_register(props);
     };
     component(Seekbar, Element, props);
-    
-    void mounted() {
+
+    void on_play_pause(event e) {
+        printf("on_click method called\n");
     }
 
     node update() {
-        Head *head = context<Head>("head"); // should allow for no field given so it finds by first type
-        return Element::update();
+        return Button {
+            { "id",      "play-pause" },
+            { "behavior", Button::Behavior(Button::Behavior::toggle) },
+            { "on-click", callback(this, &Seekbar::on_play_pause) }
+        };
     }
 
-    void draw(Canvas &canvas);
+    double offset_from_frame(int frame_id);
+    void   down();
+    void   up();
+    void   draw(Canvas &canvas);
 };
 
 struct VideoViewer:Element {
@@ -322,10 +331,6 @@ struct Ribbon:Element {
 
     component(Ribbon, Element, props);
 
-    void on_click(event e) {
-        printf("on_click method called\n");
-    }
-
     node update() {
         return node::each<str, Element>(state->content, [&](str &id, Element &e) -> node {
             str  header_id = fmt {"{0}-header",  {id}};
@@ -350,24 +355,14 @@ struct Ribbon:Element {
                 }
             };
         });
-
-        return Button {
-            { "id", "main-menu" },
-            { "on-click", callback(this, &Ribbon::on_click) }
-        };
     }
 };
 
 struct Content:Element {
     struct props {
-        Head        head;
-        bool        display_audio = false;
-        MStream     cam;
-        int         frame_id; /// needs to inter-operate with pts
-
+        int sample;
         properties meta() {
             return {
-                prop { "display-audio", display_audio }
             };
         }
 
@@ -376,16 +371,7 @@ struct Content:Element {
 
     component(Content, Element, props);
 
-    node update() {
-        return array<node> {
-            VideoViewer {
-                { "id", "video-viewer" }
-            },
-            state->display_audio ? Seekbar { /// load all audio tracks into fft on video load; just do it everytime and Seekbar shall read from it.  it does not need to know when it changes, thats self contained in Video
-                {"id", "seekbar" }
-            } : null
-        };
-    }
+    node update();
 };
 
 struct Profile:Element {
@@ -475,8 +461,7 @@ struct Annotate:Element {
                     Navigator::Nav("cursor-config") } }
             },
             Content {
-                { "id", "content" },
-                { "display-audio", state->video.is_playback() }
+                { "id", "content" }
             },
             Ribbon {
                 { "id", "ribbon" },
@@ -493,19 +478,54 @@ struct Annotate:Element {
     }
 };
 
+node Content::update() {
+    Annotate *a = grab<Annotate>();
+    return array<node> {
+        VideoViewer {
+            { "id", "video-viewer" }
+        },
+        Seekbar { /// load all audio tracks into fft on video load; just do it everytime and Seekbar shall read from it.  it does not need to know when it changes, thats self contained in Video
+            {"id", "seekbar" }
+        }
+    };
+}
+
+void Seekbar::down() {
+    vec2d cursor = data->cursor;
+    printf("mouse down: %.2f %.2f\n", cursor.x, cursor.y);
+}
+
+void Seekbar::up() {
+    printf("up\n");
+}
+
+double Seekbar::offset_from_frame(int frame_id) {
+    /// frame_id 0   = 0
+    /// frame_id max = -spec.width() + bounds.w
+    Annotate *a = grab<Annotate>();
+    image  spec = a->state->video.audio_spectrum();
+    double w    = spec.width();
+    double from = 0;
+    double to   = -w + data->bounds.w;
+    
+    i64 frame_count = a->state->video.frame_count();
+    double fscale = double(frame_id) / (frame_count - 1);
+    return from * (1.0 - fscale) + to * fscale;
+}
+
 void Seekbar::draw(Canvas &canvas) {
     Annotate *a = grab<Annotate>();
-    assert(a);
+    image spec = a->state->video.audio_spectrum();
+    rectd bounds { 0, 0, double(spec.width()), data->bounds.h };
+    bool stretch = false;
     
-    /// cursor will interpolate from left to right based on the seek_pos / frames * render_width
-    /// behind it, the audio will shift based on a fixed amount; we want 1 pixel of fft column to always represent a constant time scale
-    /// 64 pixels being 1 second for example
-    /// its translation will shift as it plays
-    /// if the video duration is shorter than the seekbar window size, it should be centered
+    if (bounds.w < data->bounds.w) {
+        bounds.w = data->bounds.w;
+        stretch  = true;
+    }
+    double x_offset = stretch ? 0.0 : offset_from_frame(a->state->frame_id); /// a function of the seek position
+    canvas.image(spec, bounds, alignment(), vec2d { x_offset, 0 }, false); /// change: default alignment does not perform bounds scaling
     Element::draw(canvas);
-    rectd rect { 2, 2, 16, 16 };
-    canvas.color(rgbad { 1.0, 1.0, 1.0, 1.0 });
-    canvas.fill(rect);
 }
 
 void VideoViewer::draw(Canvas& canvas) {

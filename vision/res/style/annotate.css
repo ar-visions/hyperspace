@@ -9,34 +9,33 @@ VideoViewer {
 
 Seekbar {
     area: l0.5 b-63 r0 b0;
-    fill-color:#111;
 }
 
 Ribbon {
-    fill-color: #224;
-    area: r-220 t0 r0 b0;
+    fill-color:   #224;
+    area:           r-220 t0 r0 b0;
     outline-color:#fff2;
-    outline-sz:1;
-    outline-area:l0.5 t-1 r1 b1;
+    outline-sz:     1;
+    outline-area:   l0.5 t-1 r1 b1;
 }
 
-
 Button.side-profile-header {
-    fill-color: #444;
-    area: l0 t0+ r0 h60;
+    fill-color:   #444;
+    area:           l0 t0+ r0 h60;
 }
 
 Profile.side-profile-content:selected {
-    fill-color: #444;
-    area: l0 t0+ r0 h60;
+    fill-color:   #444;
+    area:           l0 t0+ r0 h60;
 }
 
 Content {
-    fill-color: #444;
-    area: l80.5 0 r-220 b0;
+    fill-color:  #444;
+    area:          l80.5 0 r-220 b0;
 }
 
-Annotate:record > Content {
+Annotate:record / Content {
+    fill-color: #0000;
 }
 
 Navigator {
@@ -49,19 +48,35 @@ MainMenu {
     area:         l0 t0 w79 h73;
     outline-sz:   0;
     outline-color: #000;
-    area: l0 t0 w79 h79;
 }
 
-Button {
-    fill-radius:  12;
-    fill-color:   #0004;
-    text-color:   #fff;
-    text-align:   middle middle, 200ms back out;
-    image-align:  0.5 0.5;
-    outline-sz:   2;
+Button.play-pause {
+    fill-color:     #aaa;
+    area:           l5 t0 w24 b0;
+    image-src:      "images/play2.svg";
+    image-align:    0.5 0.5;
+    image-area:     75%;
+}
+
+Seekbar / Button.play-pause:active {
+    image-area:     100%;
+}
+
+Button.play-pause:hover {
+    fill-color:     #00f;
+    image-area:     100%;
+}
+
+Navigator / Button {
+    fill-radius:    12;
+    fill-color:    #0004;
+    text-color:    #fff;
+    text-align:     middle middle, 200ms back out;
+    image-align:    0.5 0.5;
+    outline-sz:     2;
     outline-color: #fff4;
     outline-radius: 12;
-    area: l10 t16+ r-10 h64;
+    area:           l10 t16+ r-10 h64;
 }
 
 Button.annotate {
@@ -77,13 +92,6 @@ Button.cursor_config {
 }
 
 
-Button:hover {
-    opacity:      1.0;
-//  fill-color:   #f00;
-//  text-color:   #fff;
-    text-align:   right middle, 200ms back out;
-}
-
 Button:active {
     opacity:      0.5, 250ms;
 }
@@ -95,14 +103,6 @@ Button.main-menu {
     fill-color:   #fff0;
 }
 
-Button.main-menu:hover {
-    image-area:   l-20 t-20 r20 b20;
-    image-src:    "images/menu.svg";
-    outline-sz:   0;
-    fill-color:   #fff0;
-}
-
-
 Edit {
     fill-color:    #2af, 2400ms quad;
     fill-radius:     22, 2400ms quad;
@@ -113,10 +113,6 @@ Edit {
     tab-index:       0;
     sel-color:       #428;
     sel-background:  #fff;
-}
-
-Edit:hover {
-    fill-color: #0000, 200ms quad;
 }
 
 Edit:focus {

@@ -17,7 +17,7 @@ int main() {
     
     /// switch to vulkan display, get working now.  json from https works
     request(request_url, null).then([](mx res) {
-        message msg { res.grab() };
+        message msg { res.hold() };
         var content = msg->content;
         console.log("item 0 etag: {0}", { content["items"][0]["etag"] });
     }).except([](mx err) {

@@ -144,7 +144,7 @@ struct Rubiks:mx {
     operator int() {
         try {
             for (Pipeline &pipeline: data->pipes->pipelines)
-                pipeline->user = mem->grab();
+                pipeline->user = mem->hold();
             data->run();
         } catch (const std::exception& e) {
             std::cerr << e.what() << std::endl;
@@ -179,7 +179,7 @@ struct UniformBufferObject {
 
     void process(Pipeline pipeline) { /// memory* -> Pipeline conversion implicit from the function in static
         VkExtent2D &ext = pipeline->device->swapChainExtent;
-        Rubiks   rubiks = pipeline->user.grab();
+        Rubiks   rubiks = pipeline->user.hold();
         bool     design = rubiks->design;
 
         eye = glm::vec4(glm::vec3(0.0f, 0.0f, 0.0f), 0.0f); /// these must be padded in general
