@@ -100,6 +100,7 @@ struct Navigator:Element {
             symbol s_type = button_type.symbol();
             return Button {
                 { "id",         s_type },
+                { "group",      "tab" },
                 { "behavior",   Button::Behavior::radio },
                 { "on-select",  callback(this, &Navigator::on_select) },
                 { "test1",      true }
@@ -646,7 +647,34 @@ void VideoViewer::draw(Canvas& canvas) {
     canvas.restore();
 }
 
+struct test11:mx {
+    struct M {
+        mx value = true;
+        properties meta() {
+            return {
+                {"value", value}
+            };
+        }
+        register(M);
+    };
+    mx_basic(test11);
+};
+
 int main(int argc, char *argv[]) {
+    mx test1 = false;
+    mx test2 = true;
+
+    test11 a;
+
+    //raw_t mx::find_prop_value(str name, prop *&rprop) {
+    prop *member;
+    raw_t value_ptr = a.find_prop_value("value", member);
+
+    bool resv = a.mem->type->functions->boolean(null, value_ptr);
+
+    bool res1 = test1.mem->type->functions->boolean(null, test1.mem->origin);
+    bool res2 = test1.mem->type->functions->boolean(null, test2.mem->origin);
+
     map<mx> defs  {{ "debug", uri { null }}};
     map<mx> config { args::parse(argc, argv, defs) };
     if    (!config) return args::defaults(defs);

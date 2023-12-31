@@ -53,16 +53,20 @@ MainMenu {
 Button.play-pause {
     area:           l5 t0 w24 b0;
     image-src:      "images/play2.svg";
+}
+
+Button {
     image-align:    0.5 0.5;
     image-area:     80%, 200ms quad;
 }
 
-Button.play-pause:hover {
+Button:hover {
     image-area:     100%, 200ms quad;
 }
 
-Button.play-pause:active {
+Button:active {
     image-area:     60%, 100ms quad;
+    opacity:        0.5, 250ms;
 }
 
 Navigator / Button {
@@ -77,6 +81,10 @@ Navigator / Button {
     area:           l10 t16+ r-10 h64;
 }
 
+Button:value {
+    fill-color:#fff;
+}
+
 Button.annotate {
     image-src:    "images/annotate.svg";
 }
@@ -87,11 +95,6 @@ Button.record {
 
 Button.cursor_config {
     image-src:    "images/rubiks.svg";
-}
-
-
-Button:active {
-    opacity:      0.5, 250ms;
 }
 
 Button.main-menu {
