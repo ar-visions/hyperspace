@@ -51,20 +51,18 @@ MainMenu {
 }
 
 Button.play-pause {
-    fill-color:     #aaa;
     area:           l5 t0 w24 b0;
     image-src:      "images/play2.svg";
     image-align:    0.5 0.5;
-    image-area:     75%;
-}
-
-Seekbar / Button.play-pause:active {
-    image-area:     100%;
+    image-area:     80%, 200ms quad;
 }
 
 Button.play-pause:hover {
-    fill-color:     #00f;
-    image-area:     100%;
+    image-area:     100%, 200ms quad;
+}
+
+Button.play-pause:active {
+    image-area:     60%, 100ms quad;
 }
 
 Navigator / Button {
@@ -97,10 +95,17 @@ Button:active {
 }
 
 Button.main-menu {
-    image-area:   l-20 t-20 r20 b20;
+    image-area:   100%, 200ms quad out;
     image-src:    "images/menu.svg";
-    outline-sz:   0;
     fill-color:   #fff0;
+}
+
+Button.main-menu:hover {
+    image-area:   115%, 200ms quad out;
+}
+
+Button.main-menu:active {
+    image-area:   90%, 200ms quad in;
 }
 
 Edit {
