@@ -9,6 +9,7 @@ VideoViewer {
 
 Seekbar {
     area: l0.5 b-63 r0 b0;
+    font: 8 RobotoMono-Regular;
 }
 
 Ribbon {
@@ -51,8 +52,12 @@ MainMenu {
 }
 
 Button.play-pause {
-    area:           l5 t0 w24 b0;
+    area:           l5 t14 w24 b0;
     image-src:      "images/play2.svg";
+}
+
+Button.play-pause:value {
+    image-src:      "images/pause2.svg";
 }
 
 Button {
@@ -81,8 +86,8 @@ Navigator / Button {
     area:           l10 t16+ r-10 h64;
 }
 
-Button:value {
-    fill-color:#fff;
+Navigator / Button:value {
+    fill-color:#ff02, 200ms quad;
 }
 
 Button.annotate {

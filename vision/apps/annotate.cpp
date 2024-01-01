@@ -73,7 +73,6 @@ struct Cursor {
 
 /// buttons inside here
 struct Navigator:Element {
-    
     enums(Nav, annotate,
         annotate, record, cursor_config); /// cursor selection (if any) 
 
@@ -102,43 +101,34 @@ struct Navigator:Element {
                 { "id",         s_type },
                 { "group",      "tab" },
                 { "behavior",   Button::Behavior::radio },
-                { "on-select",  callback(this, &Navigator::on_select) },
-                { "test1",      true }
+                { "on-select",  callback(this, &Navigator::on_select) }
             };
         });
     }
 };
 
-/// combined video seek with fft display of the audio, computed once, translated afterwards; 
-/// it can also display thumbnails which it would generate once;
-
-
-/// i think its better to do Context-only properties
-/// now it may actually be useful to auto bind them to Context if they are not explicitly passed in
-///
 struct Seekbar:Element {
     struct props {
-        Video *video;
+        rgbad shadow_color          = rgbad {0,0,0,0.5};
+        rgbad frame_color           = rgbad {1,1,1,0.1};
+        rgbad frame_second_color    = rgbad {1,1,1,0.3};
+        rgbad timeline_seek_color   = rgbad {1,1,1,1.0};
+        rgbad timeline_border_color = rgbad {1,1,1,0.3};
         properties meta() {
             return {
+                {"shadow-color",            shadow_color},
+                {"frame-color",             frame_color},
+                {"frame-second-color",      frame_second_color},
+                {"timeline-border-color",   timeline_border_color},
+                {"timeline-seek-color",     timeline_seek_color},
             };
         }
         type_register(props);
     };
     component(Seekbar, Element, props);
 
-    void on_play_pause(event e) {
-        printf("on_click method called\n");
-    }
-
-    node update() {
-        return Button {
-            { "id",      "play-pause" },
-            { "behavior", Button::Behavior(Button::Behavior::toggle) },
-            { "on-click", callback(this, &Seekbar::on_play_pause) }
-        };
-    }
-
+    void   on_play_pause(event e);
+    node   update();
     double offset_from_frame(int frame_id);
     void   down();
     void   up();
@@ -369,9 +359,7 @@ struct Content:Element {
 
         type_register(props);
     };
-
     component(Content, Element, props);
-
     node update();
 };
 
@@ -431,12 +419,11 @@ struct Annotate:Element {
             state->video = Video(640, 360, 30, 48000, "test.mp4");
         } else {
             state->video = Video(ion::path("sample.mp4"));
-            state->current_image = state->video.fetch_frame(40);
         }
     }
 
     void on_frame(Frame &frame) {
-        state->current_image = frame.image;
+        //state->current_image = frame.image;
         if (state->video) {
             if (state->frame_id < 30 * 10) {
                 state->frame_id++;
@@ -450,6 +437,7 @@ struct Annotate:Element {
     }
 
     node update() {
+        state->current_image = state->video.get_current_image();
         return array<node> {
             MainMenu {
                 { "id", "main-menu" }
@@ -491,6 +479,23 @@ node Content::update() {
     };
 }
 
+void Seekbar::on_play_pause(event e) {
+    Annotate *a = grab<Annotate>();
+    Button   *b = (Button*)e->target;
+    a->state->video.play_state(bool(b->node::data->value));
+    printf("on_play_pause\n");
+}
+
+node Seekbar::update() {
+    Annotate *a = grab<Annotate>();
+    return Button {
+        { "id",       "play-pause" },
+        { "behavior",  Button::Behavior(Button::Behavior::toggle) },
+        { "value",     bool(a->state->video.get_play_state()) },
+        { "on-change", callback(this, &Seekbar::on_play_pause) }
+    };
+}
+
 void Seekbar::down() {
     vec2d cursor = data->cursor;
     printf("mouse down: %.2f %.2f\n", cursor.x, cursor.y);
@@ -515,17 +520,68 @@ double Seekbar::offset_from_frame(int frame_id) {
 }
 
 void Seekbar::draw(Canvas &canvas) {
-    Annotate *a = grab<Annotate>();
-    image spec = a->state->video.audio_spectrum();
-    rectd bounds { 0, 0, double(spec.width()), data->bounds.h };
-    bool stretch = false;
-    
+    auto   a          = grab<Annotate>();
+    rgbad &c0         = state->shadow_color; //{ 0, 0, 0, 0.5 };
+    rgbad &cf         = state->frame_color; //{ 0, 0, 0, 0.5 };
+    rgbad &cs         = state->frame_second_color;
+    rgbad &c1         = state->timeline_seek_color; //{ 1, 1, 1, 1.0 };
+    rgbad &cb         = state->timeline_border_color; //{ 1, 1, 1, 0.3 };
+    i64    frame      = a->state->video.current_frame();
+    i64    count      = a->state->video.frame_count();
+    image  spec       = a->state->video.audio_spectrum();
+    int    hz         = a->state->video.frame_rate();
+    double timeline_h = 16;
+    bool   stretch    = false;
+    rectd  bounds { 0, 0, double(spec.width()), data->bounds.h - timeline_h };
+    //ion::font font { 10 };
+
     if (bounds.w < data->bounds.w) {
         bounds.w = data->bounds.w;
         stretch  = true;
     }
-    double x_offset = stretch ? 0.0 : offset_from_frame(a->state->frame_id); /// a function of the seek position
-    canvas.image(spec, bounds, alignment(), vec2d { x_offset, 0 }, false); /// change: default alignment does not perform bounds scaling
+
+    double x_offset = stretch ? 0.0 : offset_from_frame(frame); /// a function of the seek position
+
+    /// draw ruler
+    rectd border_ruler = { 0, timeline_h - 1, data->bounds.w, 1 };
+    canvas.color(cb);
+    canvas.fill(border_ruler);
+    border_ruler.y = 0;
+    canvas.fill(border_ruler);
+    canvas.font(data->font); /// can do this prior to draw
+
+    for (int f = 1; f < count; f++) {
+        int h = 3;
+        rgbad c = cf;
+        if (f % hz == 0) {
+            h = 6; // draw label
+            c = cs;
+            double tw = 16;
+            str label = fmt {"{0}s", {int(f / hz)}};
+            rectd textr = {
+                x_offset + double(f) / count * bounds.w - tw / 2, double(1 + h + 1),
+                tw, double(timeline_h - (1 + h + 1) - 1) };
+            canvas.color(rgbad { 0.5, 0.8, 1.0, 0.6 });
+            canvas.text(label, textr, { 0.5, 0.5 }, { 0, 0 }, false, null);
+        }
+        canvas.color(c);
+        rectd tk = { x_offset + double(f) / count * bounds.w, 1, 1, double(h) };
+        canvas.fill(tk);
+    }
+
+    /// draw spectrograph
+    canvas.image(spec, bounds, alignment(), vec2d { x_offset, timeline_h }, false); /// change: default alignment does not perform bounds scaling
+    
+    double f = frame / double(count);
+    rectd  r = { f * (data->bounds.w - 1), 0, 3, data->bounds.h };
+
+    canvas.color(c0);
+    canvas.fill(r);
+    r.x += 1;
+    r.w  = 1;
+    canvas.color(c1);
+    canvas.fill(r);
+
     Element::draw(canvas);
 }
 
@@ -575,7 +631,6 @@ void VideoViewer::draw(Canvas& canvas) {
 
     canvas.save();
 
-    /// draw webcam!
     rectd     bounds { 0.0, 0.0, sz.x, sz.y };
     vec2d     offset { 0.0, 0.0 };
     alignment align  { 0.5, 0.5 };
@@ -647,34 +702,7 @@ void VideoViewer::draw(Canvas& canvas) {
     canvas.restore();
 }
 
-struct test11:mx {
-    struct M {
-        mx value = true;
-        properties meta() {
-            return {
-                {"value", value}
-            };
-        }
-        register(M);
-    };
-    mx_basic(test11);
-};
-
 int main(int argc, char *argv[]) {
-    mx test1 = false;
-    mx test2 = true;
-
-    test11 a;
-
-    //raw_t mx::find_prop_value(str name, prop *&rprop) {
-    prop *member;
-    raw_t value_ptr = a.find_prop_value("value", member);
-
-    bool resv = a.mem->type->functions->boolean(null, value_ptr);
-
-    bool res1 = test1.mem->type->functions->boolean(null, test1.mem->origin);
-    bool res2 = test1.mem->type->functions->boolean(null, test2.mem->origin);
-
     map<mx> defs  {{ "debug", uri { null }}};
     map<mx> config { args::parse(argc, argv, defs) };
     if    (!config) return args::defaults(defs);
