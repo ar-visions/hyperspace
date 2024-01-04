@@ -129,6 +129,7 @@ struct Seekbar:Element {
 
     void   on_play_pause(event e);
     node   update();
+    i64    frame_at_cursor(vec2d cursor);
     double offset_from_frame(int frame_id);
     void   down();
     void   up();
@@ -419,6 +420,7 @@ struct Annotate:Element {
             state->video = Video(640, 360, 30, 48000, "test.mp4");
         } else {
             state->video = Video(ion::path("sample.mp4"));
+            state->video.play_state(true);
         }
     }
 
@@ -473,7 +475,7 @@ node Content::update() {
         VideoViewer {
             { "id", "video-viewer" }
         },
-        Seekbar { /// load all audio tracks into fft on video load; just do it everytime and Seekbar shall read from it.  it does not need to know when it changes, thats self contained in Video
+        Seekbar {
             {"id", "seekbar" }
         }
     };
@@ -496,9 +498,31 @@ node Seekbar::update() {
     };
 }
 
+i64 Seekbar::frame_at_cursor(vec2d cursor) {
+    auto   a               = grab<Annotate>();
+    i64    frame           = a->state->video.current_frame(); // we need the currently seeked frame to know the shift of the spectrum
+    i64    frame_count     = a->state->video.frame_count();
+    image  spec            = a->state->video.audio_spectrum();
+    double s_width         = double(spec.width());
+    double x_offset        = 0;
+    i64    frame_at_origin = 0;
+    i64    frames_in_view  = 0;
+
+    if (s_width < data->bounds.w) {
+        frames_in_view  = frame_count;
+    } else {
+        x_offset        = offset_from_frame(frame);
+        frame_at_origin = -x_offset / s_width * frame_count;
+        frames_in_view  = frame_count - frame_at_origin;
+    }
+    double f_cursor     = cursor.x / data->bounds.w;
+    return frame_at_origin + frames_in_view * f_cursor;
+}
+
 void Seekbar::down() {
-    vec2d cursor = data->cursor;
-    printf("mouse down: %.2f %.2f\n", cursor.x, cursor.y);
+    i64 frame = frame_at_cursor(data->cursor);
+    auto   a  = grab<Annotate>();
+    a->state->video.seek_frame(frame);
 }
 
 void Seekbar::up() {
@@ -521,11 +545,6 @@ double Seekbar::offset_from_frame(int frame_id) {
 
 void Seekbar::draw(Canvas &canvas) {
     auto   a          = grab<Annotate>();
-    rgbad &c0         = state->shadow_color; //{ 0, 0, 0, 0.5 };
-    rgbad &cf         = state->frame_color; //{ 0, 0, 0, 0.5 };
-    rgbad &cs         = state->frame_second_color;
-    rgbad &c1         = state->timeline_seek_color; //{ 1, 1, 1, 1.0 };
-    rgbad &cb         = state->timeline_border_color; //{ 1, 1, 1, 0.3 };
     i64    frame      = a->state->video.current_frame();
     i64    count      = a->state->video.frame_count();
     image  spec       = a->state->video.audio_spectrum();
@@ -533,7 +552,7 @@ void Seekbar::draw(Canvas &canvas) {
     double timeline_h = 16;
     bool   stretch    = false;
     rectd  bounds { 0, 0, double(spec.width()), data->bounds.h - timeline_h };
-    //ion::font font { 10 };
+  //ion::font font { 10 };
 
     if (bounds.w < data->bounds.w) {
         bounds.w = data->bounds.w;
@@ -544,7 +563,7 @@ void Seekbar::draw(Canvas &canvas) {
 
     /// draw ruler
     rectd border_ruler = { 0, timeline_h - 1, data->bounds.w, 1 };
-    canvas.color(cb);
+    canvas.color(state->timeline_border_color);
     canvas.fill(border_ruler);
     border_ruler.y = 0;
     canvas.fill(border_ruler);
@@ -552,10 +571,10 @@ void Seekbar::draw(Canvas &canvas) {
 
     for (int f = 1; f < count; f++) {
         int h = 3;
-        rgbad c = cf;
+        rgbad c = state->frame_color;
         if (f % hz == 0) {
             h = 6; // draw label
-            c = cs;
+            c = state->frame_second_color;
             double tw = 16;
             str label = fmt {"{0}s", {int(f / hz)}};
             rectd textr = {
@@ -575,11 +594,18 @@ void Seekbar::draw(Canvas &canvas) {
     double f = frame / double(count);
     rectd  r = { f * (data->bounds.w - 1), 0, 3, data->bounds.h };
 
-    canvas.color(c0);
+    canvas.color(state->shadow_color);
     canvas.fill(r);
     r.x += 1;
     r.w  = 1;
-    canvas.color(c1);
+
+    graphics::shape arrow;
+    arrow.move(vec2d { 0.5 + r.x - 5, 0 });
+    arrow.line(vec2d { 0.5 + r.x + 5, 0 });
+    arrow.line(vec2d { 0.5 + r.x + 0, 7 });
+
+    canvas.color(state->timeline_seek_color);
+    canvas.fill(arrow);
     canvas.fill(r);
 
     Element::draw(canvas);
