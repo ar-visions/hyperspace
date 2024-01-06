@@ -114,6 +114,7 @@ struct Seekbar:Element {
         rgbad frame_second_color    = rgbad {1,1,1,0.3};
         rgbad timeline_seek_color   = rgbad {1,1,1,1.0};
         rgbad timeline_border_color = rgbad {1,1,1,0.3};
+        i64   frame_hover           = -1;
         properties meta() {
             return {
                 {"shadow-color",            shadow_color},
@@ -132,6 +133,7 @@ struct Seekbar:Element {
     i64    frame_at_cursor(vec2d cursor);
     double offset_from_frame(int frame_id);
     void   down();
+    void   move();
     void   up();
     void   draw(Canvas &canvas);
 };
@@ -513,7 +515,7 @@ i64 Seekbar::frame_at_cursor(vec2d cursor) {
     } else {
         x_offset        = offset_from_frame(frame);
         frame_at_origin = -x_offset / s_width * frame_count;
-        frames_in_view  = frame_count - frame_at_origin;
+        frames_in_view  = data->bounds.w / s_width * frame_count;
     }
     double f_cursor     = cursor.x / data->bounds.w;
     return frame_at_origin + frames_in_view * f_cursor;
@@ -523,6 +525,11 @@ void Seekbar::down() {
     i64 frame = frame_at_cursor(data->cursor);
     auto   a  = grab<Annotate>();
     a->state->video.seek_frame(frame);
+}
+
+void Seekbar::move() {
+    state->frame_hover = frame_at_cursor(data->cursor);
+    printf("frame_hover = %f\n", state->frame_hover / 30.0);
 }
 
 void Seekbar::up() {
@@ -546,9 +553,10 @@ double Seekbar::offset_from_frame(int frame_id) {
 void Seekbar::draw(Canvas &canvas) {
     auto   a          = grab<Annotate>();
     i64    frame      = a->state->video.current_frame();
-    i64    count      = a->state->video.frame_count();
+    i64    frame_count = a->state->video.frame_count();
     image  spec       = a->state->video.audio_spectrum();
     int    hz         = a->state->video.frame_rate();
+    double s_width    = double(spec.width());
     double timeline_h = 16;
     bool   stretch    = false;
     rectd  bounds { 0, 0, double(spec.width()), data->bounds.h - timeline_h };
@@ -569,7 +577,7 @@ void Seekbar::draw(Canvas &canvas) {
     canvas.fill(border_ruler);
     canvas.font(data->font); /// can do this prior to draw
 
-    for (int f = 1; f < count; f++) {
+    for (int f = 1; f < frame_count; f++) {
         int h = 3;
         rgbad c = state->frame_color;
         if (f % hz == 0) {
@@ -578,35 +586,61 @@ void Seekbar::draw(Canvas &canvas) {
             double tw = 16;
             str label = fmt {"{0}s", {int(f / hz)}};
             rectd textr = {
-                x_offset + double(f) / count * bounds.w - tw / 2, double(1 + h + 1),
+                x_offset + double(f) / frame_count * bounds.w - tw / 2, double(1 + h + 1),
                 tw, double(timeline_h - (1 + h + 1) - 1) };
             canvas.color(rgbad { 0.5, 0.8, 1.0, 0.6 });
             canvas.text(label, textr, { 0.5, 0.5 }, { 0, 0 }, false, null);
         }
         canvas.color(c);
-        rectd tk = { x_offset + double(f) / count * bounds.w, 1, 1, double(h) };
+        rectd tk = { x_offset + double(f) / frame_count * bounds.w, 1, 1, double(h) };
         canvas.fill(tk);
     }
 
     /// draw spectrograph
     canvas.image(spec, bounds, alignment(), vec2d { x_offset, timeline_h }, false); /// change: default alignment does not perform bounds scaling
-    
-    double f = frame / double(count);
-    rectd  r = { f * (data->bounds.w - 1), 0, 3, data->bounds.h };
 
-    canvas.color(state->shadow_color);
-    canvas.fill(r);
-    r.x += 1;
-    r.w  = 1;
+    for (int i = 0; i < 2; i++) {
+        if (i == 0 && !Element::data->hover)
+            continue;
 
-    graphics::shape arrow;
-    arrow.move(vec2d { 0.5 + r.x - 5, 0 });
-    arrow.line(vec2d { 0.5 + r.x + 5, 0 });
-    arrow.line(vec2d { 0.5 + r.x + 0, 7 });
+        float f;
+        if (i == 0) {
+            /// we want to know where the hover lands in the viewable window.  it may not be visible where its < 0 or > 1
+            i64    frame_at_origin = 0;
+            i64    frames_in_view  = 0;
+            if (s_width < data->bounds.w) {
+                frames_in_view  = frame_count;
+            } else {
+                frame_at_origin = -x_offset / s_width * frame_count;
+                frames_in_view  = data->bounds.w / s_width * frame_count;
+            }
+            state->frame_hover = frame_at_cursor(data->cursor);
+            f = double(state->frame_hover - frame_at_origin) / frames_in_view;
+        } else {
+            f = frame / double(frame_count);
+        }
 
-    canvas.color(state->timeline_seek_color);
-    canvas.fill(arrow);
-    canvas.fill(r);
+        if (f < 0 || f > 1) continue;
+
+        /// we're centered on an interpolation of 0...1 to 0...bounds
+        /// cant use the same factor on the hover frame
+        rectd  r = { f * (data->bounds.w - 1), 0, 3, data->bounds.h };
+
+        canvas.opacity(i == 0 ? 0.3 : 1.0);
+        canvas.color(state->shadow_color);
+        canvas.fill(r);
+        r.x += 1;
+        r.w  = 1;
+
+        graphics::shape arrow;
+        arrow.move(vec2d { 0.5 + r.x - 5, 0 });
+        arrow.line(vec2d { 0.5 + r.x + 5, 0 });
+        arrow.line(vec2d { 0.5 + r.x + 0, 7 });
+
+        canvas.color(state->timeline_seek_color);
+        canvas.fill(arrow);
+        canvas.fill(r);
+    }
 
     Element::draw(canvas);
 }
