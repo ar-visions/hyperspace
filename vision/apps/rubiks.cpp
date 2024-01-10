@@ -88,8 +88,8 @@ struct Rubiks:mx {
             gpu      = Window::select(sz, ResizeFn(resized), this);
             device   = Device::create(gpu);
             pipes    = Pipes(
-                device, null, {
-                    Graphics { "Cube", typeof(UniformBufferObject), typeof(Vertex), "pbr",
+                device, "test", {
+                    Graphics { "test", typeof(UniformBufferObject), typeof(Vertex), "pbr",
                         [&](mx &verts, mx &indices, array<image>& asset_images                                                                                                                                                                  )
                         {
                             // we can generate various parts
@@ -225,7 +225,7 @@ struct UniformBufferObject {
             static const float rads = M_PI * 2.0f;
             glm::vec3 v  = glm::vec3(0.0f, 1.0f, 0.0f);
             glm::quat qt = quaternion_rotate(v, r * rads);
-            r += rads * 0.00001;
+            r += rads * 0.000002;
             if (r > rads)
                 r -= rads;
             model = position * glm::toMat4(qt);

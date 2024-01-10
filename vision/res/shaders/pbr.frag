@@ -51,5 +51,5 @@ void main() {
 
     vec3 env_color = texture(tx_env, uv).rgb;
     
-    pixel = vec4(color.rgb * env_color, color.a);
+    pixel = vec4(v_uv.x, v_uv.y, 0.0, 1.0);
 }

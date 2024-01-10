@@ -2,3 +2,5 @@ build
 build*
 .DS_Store
 Thumbs.db
+*.blend1
+*.spv
