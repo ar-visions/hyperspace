@@ -326,7 +326,7 @@ struct Ribbon:Element {
     component(Ribbon, Element, props);
 
     node update() {
-        return node::each<str, Element>(state->content, [&](str &id, Element &e) -> node {
+        node res = node::each<str, Element>(state->content, [&](str &id, Element &e) -> node {
             str  header_id = fmt {"{0}-header",  {id}};
             str content_id = fmt {"{0}-content", {id}};
             bool  selected = id == state->selected;
@@ -349,6 +349,16 @@ struct Ribbon:Element {
                 }
             };
         });
+        if (res->children) {
+            int test = 0;
+            test++;
+        }
+        for (node *c: res->children) {
+            str id = (*c)->id;
+            int test = 0;
+            test++;
+        }
+        return res;
     }
 };
 
@@ -667,9 +677,6 @@ void VideoViewer::draw(Canvas& canvas) {
 
     glm::vec3 eye = glm::vec3(0.0f, 0.0f, 0.0f);
     
-    //image img = path { "textures/rubiks.color2.png" };
-    //pipeline->textures[Asset::color].update(img); /// updating in here is possible because the next call is to check for updates to descriptor
-
     state->z_near = 0.0575f / 2.0f * sin(radians(45.0f));
     state->z_far  = 10.0f;
 

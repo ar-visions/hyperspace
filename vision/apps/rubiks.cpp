@@ -88,9 +88,9 @@ struct Rubiks:mx {
             gpu      = Window::select(sz, ResizeFn(resized), this);
             device   = Device::create(gpu);
             pipes    = Pipes(
-                device, "test", {
-                    Graphics { "test", typeof(UniformBufferObject), typeof(Vertex), "pbr",
-                        [&](mx &verts, mx &indices, array<image>& asset_images                                                                                                                                                                  )
+                device, "rubiks", {
+                    Graphics { "rubiks", typeof(UniformBufferObject), typeof(Vertex), "pbr",
+                        [&](mx &verts, mx &indices, array<image>& asset_images)
                         {
                             // we can generate various parts
                         }
@@ -217,6 +217,8 @@ struct UniformBufferObject {
         /// this should place the object as close to the camera as possible without a clip even as it rotates to 45
         /// not sure why we are needing to double this zclip, as it should be zclip*2 intuitively.
         /// perspective does not seem to work as i thought; the labeling should offset by this amount.
+        /// get uvs properly loading (debug whats loading by reading the vertex object)
+        /// 
         glm::vec3 cube_center = glm::vec3(px, py, pz);
         glm::mat4 position    = glm::translate(glm::mat4(1.0f), cube_center);
 
@@ -225,7 +227,7 @@ struct UniformBufferObject {
             static const float rads = M_PI * 2.0f;
             glm::vec3 v  = glm::vec3(0.0f, 1.0f, 0.0f);
             glm::quat qt = quaternion_rotate(v, r * rads);
-            r += rads * 0.000002;
+            r += rads * 0.00002;
             if (r > rads)
                 r -= rads;
             model = position * glm::toMat4(qt);

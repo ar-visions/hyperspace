@@ -20,6 +20,12 @@ Ribbon {
     outline-area:   l0.5 t-1 r1 b1;
 }
 
+Ribbon / Button {
+    area:           l0 t0 r0 b0;
+    fill-color:     #000;
+    text-color:     #fff;
+}
+
 Button.side-profile-header {
     fill-color:   #444;
     area:           l0 t0+ r0 h60;

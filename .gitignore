@@ -4,3 +4,5 @@ build*
 Thumbs.db
 *.blend1
 *.spv
+*.frag.spv
+*.vert.spv
