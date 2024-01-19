@@ -299,6 +299,7 @@ struct MainMenu:Element {
 struct Page:Element {
     struct props {
         bool sample;
+        register(props);
     };
     component(Page, Element, props);
 };
@@ -308,7 +309,7 @@ struct Ribbon:Element {
         map<Element> content; // headers need only an 'id'-header, their selected/unselected state tag, content would have 'id'-content, selected/unselected state
         str          selected; // we set this, its not exposed
         callback     header_click;
-        type_register(props);
+        str          first_id;
 
         properties meta() {
             return {
@@ -317,6 +318,7 @@ struct Ribbon:Element {
                 {"header-click", header_click}
             };
         }
+        register(props);
     };
 
     void select(str id) {
@@ -326,15 +328,26 @@ struct Ribbon:Element {
     component(Ribbon, Element, props);
 
     node update() {
+        node *n_first = node::data->mounts->count(state->first_id) ? node::data->mounts[state->first_id] : null;
+        num   len = state->content.len(), header_h = 0, total_h = Element::data->bounds.h;
+        if (n_first)
+            header_h = (*(Element*)n_first)->bounds.h;
+
+        state->first_id = null; /// prevent issue if this is removed
+        
         node res = node::each<str, Element>(state->content, [&](str &id, Element &e) -> node {
             str  header_id = fmt {"{0}-header",  {id}};
             str content_id = fmt {"{0}-content", {id}};
             bool  selected = id == state->selected;
+            if (!state->first_id) {
+                state->first_id = header_id;
+            }
             ///
             return array<node> {
                 Button {
                     { "id",         header_id }, /// css can do the rest
                     { "behavior",   Button::Behavior::radio },
+                    { "content",    "test-content" },
                     { "on-change",  callback([&, id](event e) {
                         // call update
                         state->selected = id;
@@ -345,19 +358,11 @@ struct Ribbon:Element {
                 },
                 Page {
                     { "id", header_id },
-                    { "selected", selected }
+                    { "selected", selected },
+                    { ""}
                 }
             };
         });
-        if (res->children) {
-            int test = 0;
-            test++;
-        }
-        for (node *c: res->children) {
-            str id = (*c)->id;
-            int test = 0;
-            test++;
-        }
         return res;
     }
 };
