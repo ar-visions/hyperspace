@@ -21,19 +21,25 @@ Ribbon {
 }
 
 Ribbon / Button {
-    area:           l0 t0 r0 b0;
-    fill-color:     #000;
-    text-color:     #fff;
+    fill-color:  #008;
+    area:          l0 t0+ r0 h60;
+    text-color:  #fff;
+    count-height:  false;
+    font: 16 RobotoMono-Regular;
 }
 
-Button.side-profile-header {
-    fill-color:   #444;
-    area:           l0 t0+ r0 h60;
+Ribbon / Button:selected {
+    fill-color:  #4af, 500ms quad;
 }
 
-Profile.side-profile-content:selected {
+Ribbon / Page {
     fill-color:   #444;
-    area:           l0 t0+ r0 h60;
+    area:           l0 t0+ r0 h0%, 200ms quad;
+}
+
+Ribbon / Page:selected {
+    fill-color:   #444;
+    area:           l0 t0+ r0 h100%, 200ms quad;
 }
 
 Content {

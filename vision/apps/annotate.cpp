@@ -298,7 +298,12 @@ struct MainMenu:Element {
 /// will be controlled in css; it holds onto 
 struct Page:Element {
     struct props {
-        bool sample;
+        bool selected;
+        properties meta() {
+            return {
+                {"selected", selected}
+            };
+        }
         register(props);
     };
     component(Page, Element, props);
@@ -322,6 +327,9 @@ struct Ribbon:Element {
     };
 
     void select(str id) {
+        printf("selected %s\n", id.cs());
+        int test = 0;
+        test++;
         state->selected = id; /// event->target->select(id);
     }
 
@@ -347,9 +355,10 @@ struct Ribbon:Element {
                 Button {
                     { "id",         header_id }, /// css can do the rest
                     { "behavior",   Button::Behavior::radio },
-                    { "content",    "test-content" },
+                    { "content",    header_id },
                     { "on-change",  callback([&, id](event e) {
                         // call update
+                        printf("id = %s\n", id.cs());
                         state->selected = id;
                         event ev { this };
                         if (state->header_click)
@@ -357,9 +366,8 @@ struct Ribbon:Element {
                     })}
                 },
                 Page {
-                    { "id", header_id },
-                    { "selected", selected },
-                    { ""}
+                    { "id",        content_id },
+                    { "selected",  selected }
                 }
             };
         });
