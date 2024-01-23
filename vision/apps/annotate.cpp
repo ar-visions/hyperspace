@@ -1,6 +1,3 @@
-/// ux apps are both gfx and 3D context.  the 3D background can be reality or a game or a picture of both.
-/// integration of 3D into Element
-
 #include <ux/app.hpp>
 #include <math/math.hpp>
 #include <media/video.hpp>
@@ -328,12 +325,17 @@ struct Ribbon:Element {
 
     void select(str id) {
         printf("selected %s\n", id.cs());
-        int test = 0;
-        test++;
         state->selected = id; /// event->target->select(id);
     }
 
     component(Ribbon, Element, props);
+
+    void mounted() {
+        for (auto &f: state->content) {
+            state->selected = f.key.hold();
+            break;
+        }
+    }
 
     node update() {
         node *n_first = node::data->mounts->count(state->first_id) ? node::data->mounts[state->first_id] : null;
@@ -356,6 +358,7 @@ struct Ribbon:Element {
                     { "id",         header_id }, /// css can do the rest
                     { "behavior",   Button::Behavior::radio },
                     { "content",    header_id },
+                    { "selected",   selected },
                     { "on-change",  callback([&, id](event e) {
                         // call update
                         printf("id = %s\n", id.cs());

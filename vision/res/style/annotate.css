@@ -22,10 +22,11 @@ Ribbon {
 
 Ribbon / Button {
     fill-color:  #008;
-    area:          l0 t0+ r0 h60;
+    area:          l0 t0+ r0 h40;
     text-color:  #fff;
+    text-align:    middle middle;
     count-height:  false;
-    font: 16 RobotoMono-Regular;
+    font:          11 RobotoMono-Regular;
 }
 
 Ribbon / Button:selected {

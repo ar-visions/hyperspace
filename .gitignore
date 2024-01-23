@@ -6,3 +6,5 @@ Thumbs.db
 *.spv
 *.frag.spv
 *.vert.spv
+human.bin
+human.gltf
