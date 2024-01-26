@@ -53,7 +53,7 @@
             }
         },
         {
-            "name": "vision annotate",
+            "name": "vision:annotate",
             "type": "cppdbg",
             "request": "launch",
             "program": "${workspaceFolder}/../hyperspace/build/annotate",
@@ -77,7 +77,7 @@
             }
         },
         {
-            "name": "vision rubiks",
+            "name": "vision:rubiks",
             "type": "cppdbg",
             "request": "launch",
             "program": "${workspaceFolder}/../hyperspace/build/rubiks",
@@ -94,6 +94,30 @@
             "windows":{
                 "type": "cppvsdbg",
                 "program": "${workspaceFolder}/../hyperspace/build/Debug/rubiks",
+                "cwd": "${workspaceFolder}/../hyperspace/build"
+            },
+            "osx": {
+                "MIMode": "lldb"
+            }
+        },
+        {
+            "name": "vision:faces",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/../hyperspace/build/faces",
+            "args": [],
+            "stopAtEntry": false,
+            "cwd": "${workspaceFolder}/../hyperspace/build",
+            "environment": [],
+            "MIMode": "gdb",
+            "presentation": {
+                "hidden": false,
+                "group": "",
+                "order": 1,
+            },
+            "windows":{
+                "type": "cppvsdbg",
+                "program": "${workspaceFolder}/../hyperspace/build/Debug/faces",
                 "cwd": "${workspaceFolder}/../hyperspace/build"
             },
             "osx": {
