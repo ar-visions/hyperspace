@@ -126,7 +126,7 @@
             }
         },
         {
-            "label": "build-faces",
+            "label": "build-facegen",
             "type": "shell",
 			"options": {
                 "cwd": "${workspaceFolder}/../hyperspace/build"
@@ -144,13 +144,13 @@
 			"isBackground": false,
 			"problemMatcher": ["$gcc"],
             "windows": {
-                "command": "msbuild hyperspace.sln /t:faces"
+                "command": "msbuild hyperspace.sln /t:facegen"
             },
             "osx": {
-                "command": "make faces -j16"
+                "command": "make facegen -j16"
             },
             "linux": {
-                "command": "make faces -j16",
+                "command": "make facegen -j16",
                 "options":{
                     "env":{"VERBOSE":"1"}
                 }

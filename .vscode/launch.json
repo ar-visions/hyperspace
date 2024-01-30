@@ -101,10 +101,10 @@
             }
         },
         {
-            "name": "vision:faces",
+            "name": "vision:facegen",
             "type": "cppdbg",
             "request": "launch",
-            "program": "${workspaceFolder}/../hyperspace/build/faces",
+            "program": "${workspaceFolder}/../hyperspace/build/facegen",
             "args": [],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}/../hyperspace/build",
@@ -117,7 +117,7 @@
             },
             "windows":{
                 "type": "cppvsdbg",
-                "program": "${workspaceFolder}/../hyperspace/build/Debug/faces",
+                "program": "${workspaceFolder}/../hyperspace/build/Debug/facegen",
                 "cwd": "${workspaceFolder}/../hyperspace/build"
             },
             "osx": {

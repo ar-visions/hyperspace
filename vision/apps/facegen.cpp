@@ -1,4 +1,4 @@
-#include <vk/vk.hpp>
+#include <ux/app.hpp>
 #include <glm/gtc/matrix_access.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/quaternion.hpp>
@@ -8,27 +8,36 @@
 
 using namespace ion;
 
+namespace ion {
+
 struct Light {
     glm::vec4 pos;
     glm::vec4 color;
 };
 
-struct Vertex {
-    glm::vec3 pos;
-    glm::vec3 normal;
-    glm::vec4 tangent;
-    glm::vec2 uv;
+struct HumanVertex {
+    glm::vec3  pos;
+    glm::vec3  normal;
+    glm::vec2  uv0;
+    glm::vec2  uv1;
+    glm::vec4  tangent;
+    glm::ivec4 joints; /// needs to be an array thats aligned with the loading
+    glm::vec4  weights;
 
     doubly<prop> meta() const {
         return {
-            prop { "POSITION",      pos },
-            prop { "NORMAL",        normal },
+            prop { "POSITION",      pos     },
+            prop { "NORMAL",        normal  },
+            
+            prop { "TEXCOORD_0",    uv0     },
+            prop { "TEXCOORD_1",    uv1     },
             prop { "TANGENT",       tangent },
-            prop { "TEXCOORD_0",    uv }
+            prop { "JOINTS_0",      joints  },
+            prop { "WEIGHTS_0",     weights }
         };
     }
 
-    register(Vertex);
+    register(HumanVertex);
 };
 
 struct UniformBufferObject;
@@ -68,7 +77,7 @@ struct Labels:mx {
     }
 };
 
-struct Faces:mx {
+struct FaceGen:mx {
     struct M {
         Vulkan          vk { 1, 0 };        /// this lazy loads 1.0 when GPU performs that action [singleton data]
         vec2i           sz { 256, 256 };    /// store current window size
@@ -87,16 +96,14 @@ struct Faces:mx {
         void init() {
             gpu      = Window::select(sz, ResizeFn(resized), this);
             device   = Device::create(gpu);
+
+            output_dir.make_dir();
             pipes    = Pipes(
                 device, "human", {
-                    Graphics { "Human Body", typeof(UniformBufferObject), typeof(Vertex), "pbr",
-                        [&](mx &verts, mx &indices, array<image>& asset_images)
-                        {
-                            // we can generate various parts
-                        }
-                    }
-                }
-            );
+                Graphics { "Body", typeof(UniformBufferObject), typeof(HumanVertex), "human",
+                    [&](mx &verts, mx &indices, array<image>& asset_images) { }
+                } /// will want to have L and R eyes here
+            });
         }
 
         void run() {
@@ -109,6 +116,27 @@ struct Faces:mx {
                 device->mtx.lock();
                 device->drawFrame(a_pipes);
                 vkDeviceWaitIdle(device);
+                
+                if (labels) {
+                    image img      = device->screenshot();
+                    assert(img);
+                    
+                    str  base      = fmt { "facegen-{0}",  { str::rand(12, 'a', 'z') }};
+                    path rel_png   = fmt { "{0}.png",      { base }};
+                    path path_png  = fmt { "{1}/{0}.png",  { base, odir }};
+                    path path_json = fmt { "{1}/{0}.json", { base, odir }};
+
+                    if (path_png.exists() || path_json.exists())
+                        continue;
+                    
+                    var     annots = map<mx> {
+                        { "labels", labels  },
+                        { "source", rel_png }
+                    };
+                    assert(path_json.write(annots));
+                    assert(img.save(path_png));
+                    labels = null;
+                }
                 device->mtx.unlock();
             }
             vkDeviceWaitIdle(device);
@@ -117,9 +145,8 @@ struct Faces:mx {
         register(M);
     };
     
-    mx_basic(Faces);
+    mx_basic(FaceGen);
 
-    /// return the class in main() to loop and return exit-code
     operator int() {
         try {
             for (Pipeline &pipeline: data->pipes->pipelines)
@@ -149,17 +176,20 @@ glm::quat rand_quaternion() {
 
 /// get gltf model output running nominal; there seems to be a skew in the coordinates so it may be being misread
 /// uniform has an update method with a pipeline arg
+#define MAX_JOINTS 512
+#define MAX_LIGHTS 3
 struct UniformBufferObject {
     alignas(16) glm::mat4  model;
     alignas(16) glm::mat4  view;
     alignas(16) glm::mat4  proj;
     alignas(16) glm::vec4  eye;
-    alignas(16) Light      lights[3];
+    alignas(16) glm::mat4  joints[MAX_JOINTS];
+    alignas(16) Light      lights[MAX_LIGHTS];
 
     void process(Pipeline pipeline) { /// memory* -> Pipeline conversion implicit from the function in static
         VkExtent2D &ext = pipeline->device->swapChainExtent;
-        Faces     faces = pipeline->user.hold();
-        bool     design = faces->design;
+        FaceGen    fgen = pipeline->user.hold();
+        bool     design = fgen->design;
 
         eye = glm::vec4(glm::vec3(0.0f, 0.0f, 0.0f), 0.0f); /// these must be padded in general
         
@@ -217,7 +247,7 @@ struct UniformBufferObject {
             model = position * glm::toMat4(qt);
 
             /// set all fields in Labels
-            faces->labels = Labels::M {
+            fgen->labels = Labels::M {
                 .x   = face_center.x,
                 .y   = face_center.y,
                 .z   = face_center.z,
@@ -244,7 +274,8 @@ struct UniformBufferObject {
     }
     register(UniformBufferObject);
 };
+}
 
 int main() {
-    return Faces();
+    return FaceGen();
 }
