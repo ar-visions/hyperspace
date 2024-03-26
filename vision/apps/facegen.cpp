@@ -36,8 +36,6 @@ struct HumanVertex {
             prop { "WEIGHTS_0",     weights }
         };
     }
-
-    register(HumanVertex);
 };
 
 struct UniformBufferObject;
@@ -66,7 +64,6 @@ struct Labels:mx {
             return !std::isnan(x)  && !std::isnan(y)  && !std::isnan(z)  &&
                    !std::isnan(qx) && !std::isnan(qy) && !std::isnan(qz) && !std::isnan(qw);
         }
-        register(M);
     };
 
     mx_basic(Labels);
@@ -141,8 +138,6 @@ struct FaceGen:mx {
             }
             vkDeviceWaitIdle(device);
         }
-
-        register(M);
     };
     
     mx_basic(FaceGen);
@@ -272,7 +267,6 @@ struct UniformBufferObject {
         lights[1] = { glm::vec4(glm::vec3(0.0f, 0.0f, -5.0f), 100.0f), glm::vec4(1.0, 1.0, 1.0, 1.0) };
         lights[2] = { glm::vec4(glm::vec3(0.0f, 0.0f, -5.0f), 100.0f), glm::vec4(1.0, 1.0, 1.0, 1.0) };
     }
-    register(UniformBufferObject);
 };
 }
 

@@ -46,7 +46,6 @@ struct Head {
             {"tags",      tags}
         };
     }
-    register(Head);
 };
 
 
@@ -81,8 +80,6 @@ struct Navigator:Element {
                 prop { "buttons", buttons  }
             };
         }
-
-        type_register(props);
     };
 
     component(Navigator, Element, props);
@@ -121,7 +118,6 @@ struct Seekbar:Element {
                 {"timeline-seek-color",     timeline_seek_color},
             };
         }
-        type_register(props);
     };
     component(Seekbar, Element, props);
 
@@ -156,8 +152,6 @@ struct VideoViewer:Element {
                 prop { "clicked", clicked }
             };
         }
-
-        type_register(props);
     };
 
     component(VideoViewer, Element, props);
@@ -270,7 +264,6 @@ struct VideoViewer:Element {
 struct MainMenu:Element {
     struct props {
         bool sample;
-        type_register(props);
     };
 
     component(MainMenu, Element, props);
@@ -301,7 +294,6 @@ struct Page:Element {
                 {"selected", selected}
             };
         }
-        register(props);
     };
     component(Page, Element, props);
 };
@@ -320,7 +312,6 @@ struct Ribbon:Element {
                 {"header-click", header_click}
             };
         }
-        register(props);
     };
 
     void select(str id) {
@@ -385,8 +376,6 @@ struct Content:Element {
             return {
             };
         }
-
-        type_register(props);
     };
     component(Content, Element, props);
     node update();
@@ -395,7 +384,6 @@ struct Content:Element {
 struct Profile:Element {
     struct props {
         int sample;
-        type_register(props);
     };
 
     component(Profile, Element, props);
@@ -430,7 +418,6 @@ struct Annotate:Element {
                 //prop { "video", video } /// we share video and our head model with components; using context we dont need to pass them around, store them separate.  its better this way
             };
         }
-        type_register(props);
     };
 
     component(Annotate, Element, props);
