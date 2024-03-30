@@ -1,6 +1,6 @@
 {
 	"asset":{
-		"generator":"Khronos glTF Blender I/O v4.0.44",
+		"generator":"Khronos glTF Blender I/O v4.1.62",
 		"version":"2.0"
 	},
 	"scene":0,
@@ -29,8 +29,7 @@
 						"TEXCOORD_0":2,
 						"TANGENT":3
 					},
-					"indices":4,
-					"mode":7
+					"indices":4
 				}
 			]
 		}
@@ -73,7 +72,7 @@
 		{
 			"bufferView":4,
 			"componentType":5123,
-			"count":4,
+			"count":6,
 			"type":"SCALAR"
 		}
 	],
@@ -104,14 +103,14 @@
 		},
 		{
 			"buffer":0,
-			"byteLength":8,
+			"byteLength":12,
 			"byteOffset":192,
 			"target":34963
 		}
 	],
 	"buffers":[
 		{
-			"byteLength":200,
+			"byteLength":204,
 			"uri":"models/plane.bin"
 		}
 	]
