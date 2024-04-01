@@ -2,12 +2,6 @@
 #include <math/math.hpp>
 #include <media/video.hpp>
 #include <media/camera.hpp>
-#include <glm/glm.hpp>
-#include <glm/gtc/matrix_access.hpp>
-#include <glm/gtc/matrix_transform.hpp>
-#include <glm/gtc/quaternion.hpp>
-#include <glm/gtx/quaternion.hpp>
-#include <glm/gtc/random.hpp>
 
 using namespace ion;
 
