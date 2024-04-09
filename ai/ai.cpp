@@ -32,7 +32,7 @@ AI::AI(path_t p) : AI() {
 }
 
 /// forward pass data
-array<r32> AI::operator()(array<mx> in) {
+Array<r32> AI::operator()(Array<mx> in) {
     assert(in.len());
     assert(in[0].type() == typeof(image));
 
@@ -55,11 +55,11 @@ array<r32> AI::operator()(array<mx> in) {
 
     /// get data pointer
     r32*  out = itr->typed_output_tensor<float>(0);
-    return array<r32>(out, sz);
+    return Array<r32>(out, sz);
 }
 
 #if 0
-void first_data(str model, Truth &schema, array<std::ofstream *> &odata, std::ofstream *& olabels) {
+void first_data(str model, Truth &schema, Array<std::ofstream *> &odata, std::ofstream *& olabels) {
     str index = fmt { "gen/{0}/index.json", { model } };
     std::ofstream o_index(index.cs());
     Map d_index;
@@ -71,7 +71,7 @@ void first_data(str model, Truth &schema, array<std::ofstream *> &odata, std::of
         var &d    = schema.data[i]; // store the shape on pixels in image?
         str key   = fmt {"data{0}.{1}", { i, (schema.data[i].c == Type::ui8 ? "u8" : "f32")}};
         var dmap  = var(Type::Map);
-        dmap[key] = array<int>(d.shape());
+        dmap[key] = Array<int>(d.shape());
         s_shape  += str(dmap);
     }
     string s_index = string(d_index);
@@ -88,7 +88,7 @@ void first_data(str model, Truth &schema, array<std::ofstream *> &odata, std::of
     }
 }
 
-void index_data(array<Dataset> &ds, array<str> &require, array<DataW> &index) {
+void index_data(Array<Dataset> &ds, Array<str> &require, Array<DataW> &index) {
     auto processed = map<path_t, bool>();
     for (Dataset &d: ds) {
         auto   dir = std::filesystem::directory_iterator(d.path);
@@ -146,12 +146,12 @@ void index_data(array<Dataset> &ds, array<str> &require, array<DataW> &index) {
 
 void Gen(
         Map            &args,
-        array<str>      require,
-        array<Dataset> &ds,
+        Array<str>      require,
+        Array<Dataset> &ds,
         str             model,
         std::function<Truths(var &)> fn) {
-    array<str>   idents;
-    array<DataW> annots;
+    Array<str>   idents;
+    Array<DataW> annots;
     bool         init = true;
     
     index_data(ds, require, annots);
@@ -159,7 +159,7 @@ void Gen(
     double split = args.count("split") ? double(args["split"]) : 0.10;
     /// where annot_index % w.index == 0
     std::ofstream       *olabels;
-    array<std::ofstream *> odata;
+    Array<std::ofstream *> odata;
     Truth                schema;
     std::mutex           mx;
     auto p = async(16, [&, split=split](Process *process, int index) -> var {

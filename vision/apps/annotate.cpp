@@ -18,9 +18,9 @@ struct Head {
     float     ear_y    =   0.00f; /// ear_y position (same relative ratio from head plane center on y; this is on the side, not front
     float     nose_y   =   0.00f; /// nose relative from median y of head; no sense of x offset here as if anything
     float     nose_z   =   0.15f; /// nose tip z position; in face width scale 
-    glm::vec3 pos      = { 0.0f, 0.0f, 0.5f }; /// center of head in xyz cartesian coords
+    vec3f pos      = { 0.0f, 0.0f, 0.5f }; /// center of head in xyz cartesian coords
     glm::quat orient   = { 1.0f, 0.0f, 0.0f, 0.0f }; /// rotation stored in quaternion form
-    map<mx>   tags;
+    map   tags;
 
     properties meta() {
         return {
@@ -67,7 +67,7 @@ struct Navigator:Element {
         annotate, record, cursor_config); /// cursor selection (if any) 
 
     struct props {
-        array<Nav> buttons;
+        Array<Nav> buttons;
 
         properties meta() {
             return {
@@ -132,12 +132,12 @@ struct VideoViewer:Element {
         callback    clicked;
         vec2d       last_xy;
         bool        swirl;
-        glm::vec2   sz;
-        glm::mat4   model;
-        glm::mat4   view;
-        glm::mat4   proj;
-        glm::vec3   start_cursor;
-        glm::vec3   start_pos;
+        vec2f   sz;
+        m44f        model;
+        m44f        view;
+        m44f        proj;
+        vec3f   start_cursor;
+        vec3f   start_pos;
         glm::quat   start_orient;
         float       scroll_scale = 0.005f;
 
@@ -153,50 +153,50 @@ struct VideoViewer:Element {
     void down() {
         Head *head = context<Head>("head");
         state->last_xy        = Element::data->cursor;
-        state->start_cursor   = glm::vec3(Element::data->cursor.x, Element::data->cursor.y, 0.0);
+        state->start_cursor   = vec3f(Element::data->cursor.x, Element::data->cursor.y, 0.0);
         state->start_pos      = head->pos;
         state->start_orient   = head->orient;
 
         // Convert to NDC
-        glm::vec2 ndc;
+        vec2f ndc;
         ndc.x =        (2.0f * state->last_xy.x) / state->sz.x - 1.0f;
         ndc.y = 1.0f - (2.0f * state->last_xy.y) / state->sz.y;
 
-        glm::vec4 rayClip = glm::vec4(ndc.x, ndc.y, -1.0f, 1.0f);
-        glm::vec4 rayEye  = glm::inverse(state->proj) * rayClip;
-        rayEye = glm::vec4(rayEye.x, rayEye.y, -1.0f, 0.0f);
+        vec4f rayClip = vec4f(ndc.x, ndc.y, -1.0f, 1.0f);
+        vec4f rayEye  = glm::inverse(state->proj) * rayClip;
+        rayEye = vec4f(rayEye.x, rayEye.y, -1.0f, 0.0f);
 
-        glm::vec3 rayWor = glm::normalize(glm::vec3(glm::inverse(state->view) * rayEye));
+        vec3f rayWor = glm::normalize(vec3f(glm::inverse(state->view) * rayEye));
 
         double dist = glm::distance(
-            glm::vec3(rayWor.x, rayWor.y, 0.0),
-            glm::vec3(head->pos.x, head->pos.y, 0.0)
+            vec3f(rayWor.x, rayWor.y, 0.0),
+            vec3f(head->pos.x, head->pos.y, 0.0)
         );
         
         // A simple way to check if the click is outside the cube
         state->swirl = dist > head->width * 1.0;
     }
 
-    glm::vec3 forward() {
-        glm::mat4 &v = state->view;
-        return -glm::normalize(glm::vec3(v[0][2], v[1][2], v[2][2]));
+    vec3f forward() {
+        m44f      &v = state->view;
+        return -glm::normalize(vec3f(v[0][2], v[1][2], v[2][2]));
     }
 
-    glm::vec3 to_world(float x, float y, float reference_z, const glm::mat4 &viewMatrix, const glm::mat4 &projectionMatrix, float screenWidth, float screenHeight) {
+    vec3f to_world(float x, float y, float reference_z, const m44f      &viewMatrix, const m44f      &projectionMatrix, float screenWidth, float screenHeight) {
         // Convert to normalized device coordinates
         float xNDC = (2.0f * x) / screenWidth - 1.0f;
         float yNDC = 1.0f - (2.0f * y) / screenHeight;
         float zNDC = 2.0f * reference_z - 1.0f; // Convert the reference_z to NDC
 
-        glm::vec4 clipSpacePos = glm::vec4(xNDC, yNDC, zNDC, 1.0f);
+        vec4f clipSpacePos = vec4f(xNDC, yNDC, zNDC, 1.0f);
 
         // Convert from clip space to eye space
-        glm::vec4 eyeSpacePos = glm::inverse(projectionMatrix) * clipSpacePos;
+        vec4f eyeSpacePos = glm::inverse(projectionMatrix) * clipSpacePos;
 
         // Convert from eye space to world space
-        glm::vec4 worldSpacePos = glm::inverse(viewMatrix) * eyeSpacePos;
+        vec4f worldSpacePos = glm::inverse(viewMatrix) * eyeSpacePos;
 
-        return glm::vec3(worldSpacePos) / worldSpacePos.w;
+        return vec3f(worldSpacePos) / worldSpacePos.w;
     }
 
     void scroll(real x, real y) {
@@ -220,19 +220,19 @@ struct VideoViewer:Element {
         float ay = glm::radians(diff.x * sensitivity); // Horizontal movement for Y-axis rotation
 
         auto cd = node::data;
-        glm::vec3 drag_pos = glm::vec3(Element::data->cursor.x, Element::data->cursor.y, 0.0f);
-        glm::vec3 drag_vec = state->start_cursor - drag_pos;
+        vec3f drag_pos = vec3f(Element::data->cursor.x, Element::data->cursor.y, 0.0f);
+        vec3f drag_vec = state->start_cursor - drag_pos;
         drag_vec.y = -drag_vec.y;
 
         if (cd->composer->shift) {
             float z  = head->pos.z;
             float zv = 1.0f - (head->pos.z - state->z_near) / (state->z_far - state->z_near);
 
-            glm::vec3 cursor    = glm::vec3(Element::data->cursor.x, Element::data->cursor.y, 0.0f);
-            glm::vec3 p0        = to_world(state->start_cursor.x, state->start_cursor.y, zv, state->view, state->proj, state->sz.x, state->sz.y);
-            glm::vec3 p1        = to_world(cursor.x, cursor.y, zv, state->view, state->proj, state->sz.x, state->sz.y);
+            vec3f cursor    = vec3f(Element::data->cursor.x, Element::data->cursor.y, 0.0f);
+            vec3f p0        = to_world(state->start_cursor.x, state->start_cursor.y, zv, state->view, state->proj, state->sz.x, state->sz.y);
+            vec3f p1        = to_world(cursor.x, cursor.y, zv, state->view, state->proj, state->sz.x, state->sz.y);
             
-            glm::vec3 pd = p1 - p0;
+            vec3f pd = p1 - p0;
             printf("pd = %.2f %.2f %.2f\n", pd.x, pd.y, pd.z);
             printf("cursor = %.2f %.2f %.2f\n", cursor.x, cursor.y, cursor.z);
 
@@ -240,11 +240,11 @@ struct VideoViewer:Element {
             head->pos.z   = z;
         } else {
             if (state->swirl) {
-                head->orient = head->orient * glm::angleAxis(-ax, glm::vec3(0.0f, 0.0f, 1.0f));
+                head->orient = head->orient * glm::angleAxis(-ax, vec3f(0.0f, 0.0f, 1.0f));
             } else {
                 // Calculate the rotation axis and angle from the mouse drag
-                glm::vec3 view_dir = forward();
-                glm::vec3 r_axis   = glm::normalize(glm::cross(drag_vec, view_dir));
+                vec3f view_dir = forward();
+                vec3f r_axis   = glm::normalize(glm::cross(drag_vec, view_dir));
                 float     r_amount = glm::length(drag_vec) / 100.0f; // Adjust sensitivity
                 head->orient = state->start_orient * glm::angleAxis(r_amount, r_axis);
             }
@@ -338,7 +338,7 @@ struct Ribbon:Element {
                 state->first_id = header_id;
             }
             ///
-            return array<node> {
+            return Array<node> {
                 Button {
                     { "id",         header_id }, /// css can do the rest
                     { "behavior",   Button::Behavior::radio },
@@ -449,13 +449,13 @@ struct Annotate:Element {
 
     node update() {
         state->current_image = state->video.get_current_image();
-        return array<node> {
+        return Array<node> {
             MainMenu {
                 { "id", "main-menu" }
             },
             Navigator {
                 { "id", "navigator" },
-                { "buttons", array<Navigator::Nav> {
+                { "buttons", Array<Navigator::Nav> {
                     Navigator::Nav("annotate"),
                     Navigator::Nav("record"),
                     Navigator::Nav("cursor-config") } }
@@ -480,7 +480,7 @@ struct Annotate:Element {
 
 node Content::update() {
     Annotate *a = grab<Annotate>();
-    return array<node> {
+    return Array<node> {
         VideoViewer {
             { "id", "video-viewer" }
         },
@@ -662,31 +662,31 @@ void VideoViewer::draw(Canvas& canvas) {
     float d = head->depth  / 2.0f;
 
     // test code:
-    //glm::quat additional_rotation = glm::angleAxis(radians(1.0f) / 10.0f, glm::vec3(0.0f, 1.0f, 0.0f));
+    //glm::quat additional_rotation = glm::angleAxis(radians(1.0f) / 10.0f, vec3f(0.0f, 1.0f, 0.0f));
     //head->orient = head->orient * additional_rotation;
 
-    array<glm::vec3> face_box = {
-        glm::vec3(-w, -h, -d), glm::vec3( w, -h, -d), // EF
-        glm::vec3( w, -h, -d), glm::vec3( w,  h, -d), // FG
-        glm::vec3( w,  h, -d), glm::vec3(-w,  h, -d), // GH
-        glm::vec3(-w,  h, -d), glm::vec3(-w, -h, -d)  // HE
+    Array<vec3f> face_box = {
+        vec3f(-w, -h, -d), vec3f( w, -h, -d), // EF
+        vec3f( w, -h, -d), vec3f( w,  h, -d), // FG
+        vec3f( w,  h, -d), vec3f(-w,  h, -d), // GH
+        vec3f(-w,  h, -d), vec3f(-w, -h, -d)  // HE
     };
 
-    glm::vec3 eye = glm::vec3(0.0f, 0.0f, 0.0f);
+    vec3f eye = vec3f(0.0f, 0.0f, 0.0f);
     
     state->z_near = 0.0575f / 2.0f * sin(radians(45.0f));
     state->z_far  = 10.0f;
 
     double cw = Element::data->bounds.w;
     double ch = Element::data->bounds.h;
-    glm::vec2 sz    = { cw, ch };
-    glm::mat4 proj  = glm::perspective(glm::radians(70.0f), sz.x / sz.y, state->z_near, state->z_far);
+    vec2f sz    = { cw, ch };
+    m44f      proj  = glm::perspective(glm::radians(70.0f), sz.x / sz.y, state->z_near, state->z_far);
     proj[1][1] *= -1;
 
     state->sz = sz;
 
-    glm::mat4 view  = glm::lookAt(eye, glm::vec3(0.0f, 0.0f, 1.0f), glm::vec3(0.0f, 1.0f, 0.0f));
-    glm::mat4 model = glm::translate(glm::mat4(1.0f), head->pos) * glm::toMat4(head->orient); // glm::rotate(glm::mat4(1.0f), angle, glm::vec3(0.0f, 1.0f, 0.0f));
+    m44f      view  = glm::lookAt(eye, vec3f(0.0f, 0.0f, 1.0f), vec3f(0.0f, 1.0f, 0.0f));
+    m44f      model = glm::translate(m44f(1.0f), head->pos) * glm::toMat4(head->orient); // glm::rotate(m44f(1.0f), angle, vec3f(0.0f, 1.0f, 0.0f));
 
     static rgbad white = { 1.0, 1.0, 1.0, 1.0 };
     static rgbad red   = { 1.0, 0.0, 0.0, 1.0 };
@@ -743,21 +743,21 @@ void VideoViewer::draw(Canvas& canvas) {
     /// bottom: top of the upper lip is probably good
     /// ability to copy and paste profiles is a good feature, from file to file
 
-    array<glm::vec3> features = {
-        glm::vec3(-eye_x - eye_w / 2, eye_y, -d + eye_z),
-        glm::vec3(-eye_x + eye_w / 2, eye_y, -d + eye_z),
+    Array<vec3f> features = {
+        vec3f(-eye_x - eye_w / 2, eye_y, -d + eye_z),
+        vec3f(-eye_x + eye_w / 2, eye_y, -d + eye_z),
 
-        glm::vec3( eye_x - eye_w / 2, eye_y, -d + eye_z),
-        glm::vec3( eye_x + eye_w / 2, eye_y, -d + eye_z),
+        vec3f( eye_x - eye_w / 2, eye_y, -d + eye_z),
+        vec3f( eye_x + eye_w / 2, eye_y, -d + eye_z),
 
-        glm::vec3( nose_x, nose_y,          -d - nose_z),
-        glm::vec3( nose_x, nose_y + nose_h, -d - nose_z),
+        vec3f( nose_x, nose_y,          -d - nose_z),
+        vec3f( nose_x, nose_y + nose_h, -d - nose_z),
 
-        glm::vec3(-w, ear_y,         d * ear_x),
-        glm::vec3(-w, ear_y + ear_h, d * ear_x), /// just for noticable length
+        vec3f(-w, ear_y,         d * ear_x),
+        vec3f(-w, ear_y + ear_h, d * ear_x), /// just for noticable length
 
-        glm::vec3(+w, ear_y,         d * ear_x),
-        glm::vec3(+w, ear_y + ear_h, d * ear_x) /// just for noticable length
+        vec3f(+w, ear_y,         d * ear_x),
+        vec3f(+w, ear_y + ear_h, d * ear_x) /// just for noticable length
     };
 
     for (size_t i = 0; i < 10; i += 2)
@@ -767,8 +767,8 @@ void VideoViewer::draw(Canvas& canvas) {
 }
 
 int main(int argc, char *argv[]) {
-    map<mx> defs  {{ "debug", uri { null }}};
-    map<mx> config { args::parse(argc, argv, defs) };
+    map defs  {{ "debug", uri { null }}};
+    map config { args::parse(argc, argv, defs) };
     if    (!config) return args::defaults(defs);
     ///
     return App(config, [](App &app) -> node {

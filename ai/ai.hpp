@@ -9,7 +9,7 @@ struct AI:mx {
     using intern = AInternal;
     ptr_declare(AI);
     AI(path_t p);
-    array<float> operator()(array<mx> v);
+    Array<float> operator()(Array<mx> v);
 };
 
 #if 0
@@ -21,15 +21,15 @@ struct DataW {
 };
 
 struct Truth {
-    array<float>  label;
-    array<var>    data;
+    Array<float>  label;
+    Array<var>    data;
     ///
     Truth(null_t n = nullptr) { }
     operator bool()  { return data and label.len(); }
     bool operator!() { return !(operator bool()); }
 };
 
-typedef array<Truth> Truths;
+typedef Array<Truth> Truths;
 
 struct Dataset {
     path_t      path;
@@ -48,9 +48,9 @@ struct Dataset {
     Dataset(var &d) {
         import(path_t(d[size_t(0)]), str(d[size_t(1)]));
     }
-    static array<Dataset> parse(path_t root, str ds) {
-        array<Dataset> r;
-        array<str>     sp = ds.split(",");
+    static Array<Dataset> parse(path_t root, str ds) {
+        Array<Dataset> r;
+        Array<str>     sp = ds.split(",");
         for (str &d: sp) {
             r += {root, d};
         }
@@ -59,8 +59,8 @@ struct Dataset {
 };
 
 void Gen(Map            &args,
-         array<str>      require,
-         array<Dataset> &ds,
+         Array<str>      require,
+         Array<Dataset> &ds,
          str             model,
          lambda<Truths(var &)> fn);
 

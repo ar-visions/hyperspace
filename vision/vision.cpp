@@ -25,7 +25,7 @@ image simplex_equirect(int64_t seed, int width, int height, float *scales, int l
             double lon = glm::radians(360.0 *  x / double(width)    - 180.0);
             
             // convert equirectangular coordinates to 3D cartesian coordinates (normalized)
-            glm::vec3 pos(
+            vec3f pos(
                 cos(lat) * cos(lon),
                 sin(lat),
                 cos(lat) * sin(lon));
@@ -69,15 +69,15 @@ image simplex_equirect_normal(int64_t seed, int width, int height, float vary_de
         float ry = glm::radians(values[1] * vary_degrees);
         float rz = glm::radians(values[2] * vary_degrees);
 
-        glm::mat4 r = glm::mat4(1.0f);
-        r = glm::rotate(r, rx, glm::vec3(1.0f, 0.0f, 0.0f));
-        r = glm::rotate(r, ry, glm::vec3(0.0f, 1.0f, 0.0f));
-        r = glm::rotate(r, rz, glm::vec3(0.0f, 0.0f, 1.0f));
+        m44f      r = m44f(1.0f);
+        r = glm::rotate(r, rx, vec3f(1.0f, 0.0f, 0.0f));
+        r = glm::rotate(r, ry, vec3f(0.0f, 1.0f, 0.0f));
+        r = glm::rotate(r, rz, vec3f(0.0f, 0.0f, 1.0f));
 
         /// the purply blue color is 128, 128, 255 or 0.0, 0.0, 1.0
         /// (we reserve half for the other sign with cartesian xyz to rgb)
-        glm::vec3 base_normal = glm::vec3(0.0f, 0.0f, 1.0f);
-        glm::vec3 v = r * glm::vec4(base_normal, 0.0f);
+        vec3f base_normal = vec3f(0.0f, 0.0f, 1.0f);
+        vec3f v = r * vec4f(base_normal, 0.0f);
 
         px->r = u8((v.x + 1.0f) / 2.0f * 255.0f);
         px->g = u8((v.y + 1.0f) / 2.0f * 255.0f);

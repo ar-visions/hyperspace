@@ -9,17 +9,17 @@
 using namespace ion;
 
 struct Light {
-    glm::vec4 pos;
-    glm::vec4 color;
+    vec4f pos;
+    vec4f color;
 };
 
 struct Vertex {
-    glm::vec3 pos;
-    glm::vec3 normal;
-    glm::vec4 tangent;
-    glm::vec2 uv;
+    vec3f pos;
+    vec3f normal;
+    vec4f tangent;
+    vec2f uv;
 
-    doubly<prop> meta() const {
+    properties meta() const {
         return {
             prop { "POSITION",      pos },
             prop { "NORMAL",        normal },
@@ -38,7 +38,7 @@ struct Labels:mx {
         float  qx = NAN, qy = NAN, qz = NAN, qw = NAN;
         float fov = NAN;
 
-        doubly<prop> meta() {
+        properties meta() {
             return {
                 { "x",     x },
                 { "y",     y },
@@ -87,7 +87,7 @@ struct Rubiks:mx {
             pipes    = Pipes(
                 device, "rubiks", {
                     Graphics { "rubiks", typeof(UniformBufferObject), typeof(Vertex), "pbr",
-                        [&](mx &verts, mx &indices, array<image>& asset_images)
+                        [&](mx &verts, mx &indices, Array<image>& asset_images)
                         {
                             // we can generate various parts
                         }
@@ -99,7 +99,7 @@ struct Rubiks:mx {
         void run() {
             str odir = output_dir.cs();
             output_dir.make_dir();
-            array<Pipes> a_pipes({ pipes });
+            Array<Pipes> a_pipes({ pipes });
 
             while (!glfwWindowShouldClose(gpu->window)) {
                 glfwPollEvents();
@@ -119,7 +119,7 @@ struct Rubiks:mx {
                     if (path_png.exists() || path_json.exists())
                         continue;
                     
-                    var     annots = map<mx> {
+                    var     annots = map {
                         { "labels", labels  },
                         { "source", rel_png }
                     };
@@ -149,12 +149,12 @@ struct Rubiks:mx {
     }
 };
 
-glm::quat quaternion_rotate(glm::vec3 v, float rads) {
+glm::quat quaternion_rotate(vec3f v, float rads) {
     return glm::angleAxis(rads, glm::normalize(v));
 }
 
 glm::quat rand_quaternion() {
-    glm::vec3 rv(
+    vec3f rv(
         glm::linearRand(-1.0f, 1.0f),
         glm::linearRand(-1.0f, 1.0f),
         glm::linearRand(-1.0f, 1.0f)
@@ -166,10 +166,10 @@ glm::quat rand_quaternion() {
 /// get gltf model output running nominal; there seems to be a skew in the coordinates so it may be being misread
 /// uniform has an update method with a pipeline arg
 struct UniformBufferObject {
-    alignas(16) glm::mat4  model;
-    alignas(16) glm::mat4  view;
-    alignas(16) glm::mat4  proj;
-    alignas(16) glm::vec4  eye;
+    alignas(16) m44f       model;
+    alignas(16) m44f       view;
+    alignas(16) m44f       proj;
+    alignas(16) vec4f  eye;
     alignas(16) Light      lights[3];
 
     void process(Pipeline pipeline) { /// memory* -> Pipeline conversion implicit from the function in static
@@ -177,7 +177,7 @@ struct UniformBufferObject {
         Rubiks   rubiks = pipeline->user.hold();
         bool     design = rubiks->design;
 
-        eye = glm::vec4(glm::vec3(0.0f, 0.0f, 0.0f), 0.0f); /// these must be padded in general
+        eye = vec4f(vec3f(0.0f, 0.0f, 0.0f), 0.0f); /// these must be padded in general
         
         //image img = path { "textures/rubiks.color2.png" };
         //pipeline->textures[Asset::color].update(img); /// updating in here is possible because the next call is to check for updates to descriptor
@@ -201,9 +201,9 @@ struct UniformBufferObject {
 
         //pipeline->textures[Asset::color].update(img)
         view = glm::lookAt(
-            glm::vec3(eye),
-            glm::vec3(0.0f, 0.0f, 1.0f),
-            glm::vec3(0.0f, 1.0f, 0.0f));
+            vec3f(eye),
+            vec3f(0.0f, 0.0f, 1.0f),
+            vec3f(0.0f, 1.0f, 0.0f));
         
         float px = design ? 0.00f           : rand::uniform( 0.0f, 0.0f);
         float py = design ? 0.00f           : rand::uniform( 0.0f, 0.0f);
@@ -214,13 +214,13 @@ struct UniformBufferObject {
         /// perspective does not seem to work as i thought; the labeling should offset by this amount.
         /// get uvs properly loading (debug whats loading by reading the vertex object)
         /// 
-        glm::vec3 cube_center = glm::vec3(px, py, pz);
-        glm::mat4 position    = glm::translate(glm::mat4(1.0f), cube_center);
+        vec3f cube_center = vec3f(px, py, pz);
+        m44f      position    = glm::translate(m44f(1.0f), cube_center);
 
         if (design) {
             static float r = 0.0f;
             static const float rads = M_PI * 2.0f;
-            glm::vec3 v  = glm::vec3(0.0f, 1.0f, 0.0f);
+            vec3f v  = vec3f(0.0f, 1.0f, 0.0f);
             glm::quat qt = quaternion_rotate(v, r * rads);
             r += rads * 0.00002;
             if (r > rads)
@@ -245,17 +245,17 @@ struct UniformBufferObject {
         }
 
         float cube_rads = 0.0575f * 5;
-        glm::mat4 VP     = proj * view;
-        glm::vec4 left   = glm::normalize(glm::row(VP, 3) + glm::row(VP, 0));
-        glm::vec4 right  = glm::normalize(glm::row(VP, 3) - glm::row(VP, 0));
-        glm::vec4 bottom = glm::normalize(glm::row(VP, 3) + glm::row(VP, 1));
-        glm::vec4 top    = glm::normalize(glm::row(VP, 3) - glm::row(VP, 1));
-        glm::vec4 vnear  = glm::normalize(glm::row(VP, 3) + glm::row(VP, 2));
-        glm::vec4 vfar   = glm::normalize(glm::row(VP, 3) - glm::row(VP, 2));
+        m44f      VP     = proj * view;
+        vec4f left   = glm::normalize(glm::row(VP, 3) + glm::row(VP, 0));
+        vec4f right  = glm::normalize(glm::row(VP, 3) - glm::row(VP, 0));
+        vec4f bottom = glm::normalize(glm::row(VP, 3) + glm::row(VP, 1));
+        vec4f top    = glm::normalize(glm::row(VP, 3) - glm::row(VP, 1));
+        vec4f vnear  = glm::normalize(glm::row(VP, 3) + glm::row(VP, 2));
+        vec4f vfar   = glm::normalize(glm::row(VP, 3) - glm::row(VP, 2));
 
-        lights[0] = { glm::vec4(glm::vec3(2.0f, 0.0f,  4.0f),  25.0f), glm::vec4(1.0, 1.0, 1.0, 1.0) };
-        lights[1] = { glm::vec4(glm::vec3(0.0f, 0.0f, -5.0f), 100.0f), glm::vec4(1.0, 1.0, 1.0, 1.0) };
-        lights[2] = { glm::vec4(glm::vec3(0.0f, 0.0f, -5.0f), 100.0f), glm::vec4(1.0, 1.0, 1.0, 1.0) };
+        lights[0] = { vec4f(vec3f(2.0f, 0.0f,  4.0f),  25.0f), vec4f(1.0, 1.0, 1.0, 1.0) };
+        lights[1] = { vec4f(vec3f(0.0f, 0.0f, -5.0f), 100.0f), vec4f(1.0, 1.0, 1.0, 1.0) };
+        lights[2] = { vec4f(vec3f(0.0f, 0.0f, -5.0f), 100.0f), vec4f(1.0, 1.0, 1.0, 1.0) };
     }
 };
 
