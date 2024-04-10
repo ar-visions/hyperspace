@@ -389,9 +389,9 @@ struct Profile:Element {
     
     void draw(Canvas& canvas) {
         /// lookup profile and paint it on top of a cm-grid pattern
-        rectd &bounds = Element::data->bounds;
+        ion::rect &bounds = Element::data->bounds;
         Element::draw(canvas);
-        rectd area = { 0, 0, bounds.w, bounds.h };
+        ion::rect area = { 0, 0, bounds.w, bounds.h };
         canvas.color((cstr)"#f00");
         canvas.fill(area);
     }
@@ -566,7 +566,7 @@ void Seekbar::draw(Canvas &canvas) {
     double s_width    = double(spec.width());
     double timeline_h = 16;
     bool   stretch    = false;
-    rectd  bounds { 0, 0, double(spec.width()), data->bounds.h - timeline_h };
+    ion::rect  bounds { 0, 0, double(spec.width()), data->bounds.h - timeline_h };
   //ion::font font { 10 };
 
     if (bounds.w < data->bounds.w) {
@@ -577,7 +577,7 @@ void Seekbar::draw(Canvas &canvas) {
     double x_offset = stretch ? 0.0 : offset_from_frame(frame); /// a function of the seek position
 
     /// draw ruler
-    rectd border_ruler = { 0, timeline_h - 1, data->bounds.w, 1 };
+    ion::rect border_ruler = { 0, timeline_h - 1, data->bounds.w, 1 };
     canvas.color(state->timeline_border_color);
     canvas.fill(border_ruler);
     border_ruler.y = 0;
@@ -592,14 +592,14 @@ void Seekbar::draw(Canvas &canvas) {
             c = state->frame_second_color;
             double tw = 16;
             str label = fmt {"{0}s", {int(f / hz)}};
-            rectd textr = {
+            ion::rect textr = {
                 x_offset + double(f) / frame_count * bounds.w - tw / 2, double(1 + h + 1),
                 tw, double(timeline_h - (1 + h + 1) - 1) };
             canvas.color(rgbad { 0.5, 0.8, 1.0, 0.6 });
             canvas.text(label, textr, { 0.5, 0.5 }, { 0, 0 }, false, null);
         }
         canvas.color(c);
-        rectd tk = { x_offset + double(f) / frame_count * bounds.w, 1, 1, double(h) };
+        ion::rect tk = { x_offset + double(f) / frame_count * bounds.w, 1, 1, double(h) };
         canvas.fill(tk);
     }
 
@@ -631,7 +631,7 @@ void Seekbar::draw(Canvas &canvas) {
 
         /// we're centered on an interpolation of 0...1 to 0...bounds
         /// cant use the same factor on the hover frame
-        rectd  r = { f * (data->bounds.w - 1), 0, 3, data->bounds.h };
+        ion::rect  r = { f * (data->bounds.w - 1), 0, 3, data->bounds.h };
 
         canvas.opacity(i == 0 ? 0.3 : 1.0);
         canvas.color(state->shadow_color);
@@ -695,7 +695,7 @@ void VideoViewer::draw(Canvas& canvas) {
 
     canvas.save();
 
-    rectd     bounds { 0.0, 0.0, sz.x, sz.y };
+    ion::rect     bounds { 0.0, 0.0, sz.x, sz.y };
     vec2d     offset { 0.0, 0.0 };
     alignment align  { 0.5, 0.5 };
 
