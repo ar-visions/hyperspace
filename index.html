@@ -72,38 +72,20 @@ void main() {
     );
 
     
+    vec3 up    = vec3(0.0, 1.0, 0.0); // "Up" direction in world space
+    vec3 zAxis = normalize(vec3(0.0, 0.0, 0.0) - uObserverPosition); // Corrected: target - position
+    vec3 xAxis = normalize(cross(up, zAxis)); // Right direction: Perpendicular to "up" and "forward"
+    vec3 yAxis = cross(zAxis, xAxis); // Recalculate "up" direction to ensure orthogonality
 
+    // Create the view matrix
+    vec3 obs = normalize(vec3(dot(xAxis, uObserverPosition), dot(yAxis, uObserverPosition), dot(zAxis, uObserverPosition))) * uDistanceToScreen;
 
-vec3 up    = vec3(0.0, 1.0, 0.0); // "Up" direction in world space
-vec3 zAxis = normalize(vec3(0.0, 0.0, 0.0) - uObserverPosition); // Corrected: target - position
-vec3 xAxis = normalize(cross(up, zAxis)); // Right direction: Perpendicular to "up" and "forward"
-vec3 yAxis = cross(zAxis, xAxis); // Recalculate "up" direction to ensure orthogonality
-
-// Create the view matrix
-mat4 viewMatrix = mat4( // <--- doesnt work, placeholder view does.
-    vec4(xAxis, 0.0),
-    vec4(yAxis, 0.0),
-    vec4(-zAxis, 0.0),  // Negated for proper right-handed coordinate system
-    vec4(
-        vec3(dot(xAxis, uObserverPosition), dot(yAxis, uObserverPosition), dot(zAxis, uObserverPosition)),
-        1.0
-    )
-);
-
-
-
-    mat4 staticProjection = mat4(
-        vec4(1.0, 0.0, 0.0, 0.0),
-        vec4(0.0, 1.0, 0.0, 0.0),
-        vec4(0.0, 0.0, -1.0, -1.0),
-        vec4(0.0, 0.0, -2.0, 0.0)
+    mat4 viewMatrix = mat4(
+        vec4(xAxis, 0.0),
+        vec4(yAxis, 0.0),
+        vec4(-zAxis, 0.0),
+        vec4(obs, 1.0)
     );
-mat4 viewMatrixPlaceholder = mat4(
-    vec4(1.0, 0.0, 0.0, 0.0),  // Right vector
-    vec4(0.0, 1.0, 0.0, 0.0),  // Up vector
-    vec4(0.0, 0.0, 1.0, 0.0),  // Forward vector
-    vec4(0.0, 0.0, -uDistanceToScreen, 1.0)  // Camera position
-);
 
     // Combine view and projection transformations
     gl_Position = projectionMatrix * viewMatrix * worldPosition;
@@ -127,7 +109,7 @@ void main() {
         const near = 1.0;
         const far  = 100.0;
         const scene = new THREE.Scene();
-        const camera = new THREE.PerspectiveCamera(65, window.innerWidth / window.innerHeight, near, far);
+        const camera = new THREE.PerspectiveCamera(85, window.innerWidth / window.innerHeight, near, far);
         const renderer = new THREE.WebGLRenderer();
         renderer.setSize(window.innerWidth, window.innerHeight);
         renderer.setClearColor(0x1611ab);
