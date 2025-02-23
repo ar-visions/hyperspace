@@ -11,4 +11,5 @@ human.gltf
 human.blend
 *human*
 node_modules
-
+sessions
+*.pth

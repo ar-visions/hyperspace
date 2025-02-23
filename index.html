@@ -61,7 +61,7 @@ void main() {
 
     // Calculate skew based on observer's position
     float skewX = uObserverPosition.x / -uObserverPosition.z; // Horizontal skew
-    float skewY = uObserverPosition.y / -uObserverPosition.z; // Vertical skew
+    float skewY = uObserverPosition.y / -uObserverPosition.z * 1.5; // Vertical skew
 
     // Perspective projection matrix (constructed dynamically)
     mat4 projectionMatrix = mat4(
