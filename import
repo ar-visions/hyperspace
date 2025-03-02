@@ -1,0 +1,30 @@
+A	https://github.com/ar-visions/A	main
+
+bazel	https://github.com/bazelbuild/bazel	758b44d
+	-DBUILD_SHARED_LIBS=1
+
+pytorch	https://github.com/pytorch/pytorch	!1eba9b3
+	> export _GLIBCXX_USE_CXX11_ABI=1
+	> export BUILD_TEST=0
+	> export USE_NCCL=0
+	> export USE_CUDA=0
+	> export USE_VULKAN=1
+	> export USE_VULKAN_FP16_INFERENCE=1
+	> export USE_VULKAN_RELAXED_PRECISION=1
+	> export USE_DISTRIBUTED=0
+	> export USE_MPI=0
+	> export USE_TENSORPIPE=0
+	> export USE_MKLDNN=1
+	> export USE_ITT=0
+	> export USE_PYTORCH_QNNPACK=0
+	> export USE_NNPACK=0
+	> export USE_XNNPACK=0
+	> export USE_KINETO=0
+	> export USE_OBSERVERS=0
+	> cd ..
+	> python3 setup.py build && python3 setup.py install --prefix=$IMPORT && cd build/lib && cp -a *.so $IMPORT/lib/
+
+app:
+	A torch torch_cpu c10 stdc++
+	linux:
+		asound

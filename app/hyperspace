@@ -1,0 +1,4 @@
+#ifndef _HYPERSPACE_
+#define _HYPERSPACE_
+#include <A>
+#endif
