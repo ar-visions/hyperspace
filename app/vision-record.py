@@ -15,6 +15,10 @@ from    playsound   import playsound
 import  argparse
 import  sounddevice as sd
 
+# record single plot in animation!
+# this makes far more sense
+# we will need 100,000 images for this
+
 mic_level = 0
 
 def audio_callback(indata, frames, time, status):
@@ -78,9 +82,6 @@ cv2.imshow(title, background)
 zone      = 3
 zone_cm   = [ 10, 30, 50 ]
 z_max     = 50
-head_x    = -1
-head_y    = -1
-head_z    = 0
 eye_x     = -1
 eye_y     = -1
 pcount    = 4
@@ -160,45 +161,46 @@ selected6 = None
 ##
 
 def write(id, image):
-    filename = f"sessions/{session}/f{id}_{session}-{frame_count:04d}_{eye_x/screen_width:.4f}_{eye_y/screen_height:.4f}_{head_x/screen_width:.4f}_{head_y/screen_height:.4f}_{head_z/z_max:.4f}.png"
+    filename = f"sessions/{session}/f{id}_{session}-{frame_count:04d}_{eye_x/screen_width:.4f}_{eye_y/screen_height:.4f}.png"
     cv2.imwrite(filename, image, [cv2.IMWRITE_PNG_COMPRESSION, 9])
     print(f"saved: {filename}")
 
+interval    = 4
+recording   = False
+last_space  = 0
+center_x       = random.randint(0, screen_width)
+center_y       = random.randint(0, screen_height)
+eye_x          = 0
+eye_y          = 0
+
+center_x, center_y = eye_x, eye_y
+
+
+# Define the orbit parameters
+orbit_radius = 200  # Distance from the main circle
+orbit_period = 5    # Time in seconds for a full orbit
+
+import threading
+
+def write_in_thread(id, data):
+    write(id, data)
+
 while True:
+    t = time.time()
+
     # refresh background image every 3 seconds
-    if not debug and selected and (head_x == -1 or (key == 32)): # we should also support audio-based capture
-        if head_x != -1:
-            playsound('beep.wav')
-            write(2, selected2)
-            write(6, selected6)
+    if recording and frame_count % interval == 0: # we should also support audio-based capture
+        #playsound('beep.wav')
+        #write(2, selected2)
+        #write(6, selected6)
+        threading.Thread(target=write_in_thread, args=(2, selected2), daemon=True).start()
+        threading.Thread(target=write_in_thread, args=(6, selected6), daemon=True).start()
 
-        if eyes_only:
-            head_x = screen_width // 2
-            head_y = screen_height // 2
-            eye_x  = random.randint(0,   screen_width)
-            eye_y  = random.randint(0,   screen_height)
-            zone   = 1
-            head_z = zone_cm[zone]
-        else:
-            pindex += 1
-            if pindex >= pcount:
-                pindex = 0
-            if head_x == -1 or pindex == 0:
-                zone -= 1
-                if zone < 0: zone = 2
-                if head_x == -1 or zone == 2:
-                    pad    = screen_width / 16
-                    head_x = random.randint(pad, screen_width - pad * 2)
-                    head_y = random.randint(pad, screen_height - pad * 2)
-                    eye_x  = random.randint(0,   screen_width)
-                    eye_y  = random.randint(0,   screen_height)
-                head_z = zone_cm[zone]  # Radius in pixels
-
-    
     blended_frame = background.copy()
 
     # indicate which ones are selected, through here if we need
     selected = True
+
     # camera 2 (top)
     selected2, pip_frame2 = cam2.read()
     blended_frame[pip_y-pip_height:pip_y, pip_x:pip_x+pip_width] = pip_frame2
@@ -206,14 +208,34 @@ while True:
     selected6, pip_frame6 = cam6.read()
     blended_frame[pip_y:pip_y+pip_height, pip_x:pip_x+pip_width] = pip_frame6
 
-    half = head_z // 2 * 2
-    cv2.rectangle(blended_frame, (head_x - half, head_y - half * 2), (head_x + half, head_y + half * 2), 255, 3)  # 255=white, 1=thickness
-    cv2.circle(blended_frame, (eye_x, eye_y), 4, 255, 2)  # -1 thickness fills the circle
+    cv2.circle(blended_frame, (center_x, center_y), 2, 255, 2)  # -1 thickness fills the circle
+
+
+    # Calculate angle based on time
+    angle = (t % orbit_period) / orbit_period * 2 * np.pi  # Convert time to angle in radians
+
+    # Calculate the orbiting circle position
+    orbit_x = int(center_x + orbit_radius * np.cos(angle))
+    orbit_y = int(center_y + orbit_radius * np.sin(angle))
+
+    # Draw the orbiting circle
+    cv2.circle(blended_frame, (orbit_x, orbit_y), 4, 255, -1)  # Filled orbiting circle
+
     cv2.imshow(title, blended_frame)
     frame_count += 1
     
     print(f'mic: {mic_level}')
     key          = cv2.waitKey(10) & 0xFF
+    current_ticks = int(time.time() * 1000)  # Current time in milliseconds
+    
+    # Handle spacebar with cooldown
+    if key == 32 and (current_ticks - last_space > 500):
+        recording = not recording
+        last_space = current_ticks
+        if not recording:
+            center_x  = random.randint(0,   screen_width)
+            center_y  = random.randint(0,   screen_height)
+
     if key == 27: break # esc
 
 cv2.destroyAllWindows()

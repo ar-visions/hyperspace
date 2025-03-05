@@ -25,25 +25,49 @@ CYAN   = '\033[96m'
 PURPLE = '\033[95m'
 RESET  = '\033[0m'
 
+
+
+SEED = 42  # You can change this to any fixed number
+
+# Seed Python's built-in random module
+random.seed(SEED)
+
+# Seed NumPy
+np.random.seed(SEED)
+
+# Seed TensorFlow
+tf.random.set_seed(SEED)
+
+# Ensure deterministic behavior for cuDNN (may slow down training slightly)
+os.environ['TF_DETERMINISTIC_OPS'] = '1'
+os.environ['CUDA_VISIBLE_DEVICES'] = '0'  # Ensures single-GPU determinism (optional)
+
+
+
+
 # keras-interfacing model, with batch using our data
 class model(tf.keras.utils.Sequence):
     def __init__(self, mode, data, batch_size):
         self.mode         = mode
         self.data         = data
         self.batch_size   = batch_size
+        self.inputs       = []
 
     # process batch
     def __getitem__(self, batch_index):
         start         = batch_index * self.batch_size
         end           = min((batch_index + 1) * self.batch_size, len(self.data))
-        batch_data    = []
+        batch_data    = {}
         batch_label   = []
         for i in range(start, end):
             data, label = self.label(self.data, i)
-            batch_data  .append(data)
-            batch_label .append(label)
-
-        return batch_data, batch_label
+            for f in self.inputs:
+                if f not in batch_data:
+                    batch_data[f] = []
+                batch_data[f].append(np.array(data[f], dtype=np.float32))
+            batch_label.append(np.array(label, dtype=np.float32))
+        for f in batch_data:  batch_data [f] = np.array(batch_data [f], dtype=np.float32)
+        return batch_data, np.array(batch_label)
     
     # length of batched data
     def __len__(self):
@@ -64,8 +88,8 @@ def export_part(mode, layer, part, index):
     with open(weights_filename, 'wb') as f: w[index].tofile(f)
     return weights_filename
 
-def export_json(model, output_json_path, quality, input_size):
-    mode = model.mode()
+def export_json(model, mode, output_json_path, quality, input_size):
+    return
     layers_dict = OrderedDict()
     output_shapes = {}
     # Function to get layer type
@@ -151,8 +175,8 @@ def export_json(model, output_json_path, quality, input_size):
                 "tensor":        [ishape] if ishape is not None else [],
                 "input_dim":    idim,
                 "output_dim":   layer.units,
-                "weights":      export_part(layer, 'weights', 0),
-                "bias":         export_part(layer, 'bias', 1)
+                "weights":      export_part(mode, layer, 'weights', 0),
+                "bias":         export_part(mode, layer, 'bias', 1)
             })
         elif layer_class == 'Concatenate':
             layers_dict[layer.name].update({
@@ -197,29 +221,29 @@ def export_json(model, output_json_path, quality, input_size):
                                 output_connections[source_layer].append(layer_name)
     
     # If the above doesn't work, try direct inspection
-    if all(len(layer_info["inputs"]) == 0 for layer_info in layers_dict.values() if layer_info["Type"] != "input"):
-        for i, layer in enumerate(model.layers):
-            if i > 0:  # Skip the first layer (usually input)
-                input_tensors = layer.input
-                if isinstance(input_tensors, list):
-                    for input_tensor in input_tensors:
-                        for prev_layer in model.layers:
-                            if prev_layer.output is input_tensor:
-                                layers_dict[layer.name]["inputs"].append(prev_layer.name)
-                                output_connections[prev_layer.name].append(layer.name)
-                else:
+    #if all(len(layer_info["inputs"]) == 0 for layer_info in layers_dict.values() if not 'Type' in layer_info or layer_info["Type"] != "input"):
+    for i, layer in enumerate(model.layers):
+        if i > 0:  # Skip the first layer (usually input)
+            input_tensors = layer.input
+            if isinstance(input_tensors, list):
+                for input_tensor in input_tensors:
                     for prev_layer in model.layers:
-                        if prev_layer.output is input_tensors:
+                        if prev_layer.output is input_tensor:
                             layers_dict[layer.name]["inputs"].append(prev_layer.name)
                             output_connections[prev_layer.name].append(layer.name)
+            else:
+                for prev_layer in model.layers:
+                    if prev_layer.output is input_tensors:
+                        layers_dict[layer.name]["inputs"].append(prev_layer.name)
+                        output_connections[prev_layer.name].append(layer.name)
     
     # If still no connections, use a last resort approach
-    if all(len(layer_info["inputs"]) == 0 for layer_info in layers_dict.values() if layer_info["Type"] != "input"):
-        for i in range(1, len(model.layers)):
-            current_layer = model.layers[i]
-            prev_layer    = model.layers[i - 1]
-            layers_dict[current_layer.name]["inputs"].append(prev_layer.name)
-            output_connections[prev_layer.name].append(current_layer.name)
+    #if all(len(layer_info["inputs"]) == 0 for layer_info in layers_dict.values() if layer_info["Type"] != "input"):
+    for i in range(1, len(model.layers)):
+        current_layer = model.layers[i]
+        prev_layer    = model.layers[i - 1]
+        layers_dict[current_layer.name]["inputs"].append(prev_layer.name)
+        output_connections[prev_layer.name].append(current_layer.name)
     
     # Find terminal nodes (layers that don't output to any other layer)
     remaining_nodes = []
@@ -252,47 +276,58 @@ def export_json(model, output_json_path, quality, input_size):
         json.dump(model_json, f, indent=4)
 
 
-def train(train_generator, val_generator, quality, lr, epochs, input_size):
-    model = train_generator.model(quality)
+def train(train, val, quality, lr, epochs, input_size):
+    model = train.model(quality)
+
+    # prevent boilerplate with this round-about input binding
+    train.inputs = []
+    for layer in model.layers:
+        if isinstance(layer, InputLayer):
+            train.inputs.append(layer.name)
+    model_inputs = train.inputs
+    val.inputs   = train.inputs
 
     # Set up optimizer
     optimizer = tf.keras.optimizers.Adam(learning_rate=lr)
-    loss_fn = tf.keras.losses.MeanSquaredError()
     bar_length = 40
-    
+
     # Training and validation loops
     for epoch in range(epochs):
         # Training phase
         model.trainable = True
         total_loss = 0.0
         total_errors = tf.zeros(2)  # Accumulate total X, Y errors
-        num_batches = len(train_generator)
-        mode = train_generator.__class__.__name__
+        num_batches = len(train)
+        mode = train.__class__.__name__
+
         for i in range(num_batches):
             # Get the data for this batch
             try:
-                data, labels = train_generator[i]
-                outputs = model(data, training=True)
+                data, labels = train[i]
+                inputs = {}
+                for name in model_inputs:
+                    inputs[name] = data[name]
+                outputs = model(inputs, training=True)
 
                 # forward pass and calculate gradients
                 with tf.GradientTape() as tape:
-                    outputs = model(data, training=True)
-                    loss = loss_fn(labels, outputs)
+                    outputs = model(inputs, training=True)
+                    loss    = train.loss(labels, outputs)
                 
                 # Backward pass and update weights
                 gradients = tape.gradient(loss, model.trainable_variables)
                 optimizer.apply_gradients(zip(gradients, model.trainable_variables))
                 
                 # Calculate metrics
-                total_loss += loss.numpy()
-                batch_error = tf.reduce_mean(tf.abs(outputs - labels), axis=0)
+                total_loss   += loss.numpy()
+                batch_error   = tf.reduce_mean(tf.abs(outputs - labels), axis=0)
                 total_errors += batch_error
-                progress = (i + 1) / num_batches
-                avg_loss = total_loss / (i + 1)
-                avg_errors = (total_errors / (i + 1)).numpy()
-                fin = progress >= 0.9999
-                PCOLOR = GREEN if fin else CYAN
-                status = (f'\r{YELLOW}training {GRAY}{BLUE}{epoch+1:4}/{epochs:4}{GRAY} | ' +
+                progress      = (i + 1) / num_batches
+                avg_loss      = total_loss / (i + 1)
+                avg_errors    = (total_errors / (i + 1)).numpy()
+                fin           = progress >= 0.9999
+                PCOLOR        = GREEN if fin else CYAN
+                status        = (f'\r{YELLOW}training {GRAY}{BLUE}{epoch+1:4}/{epochs:4}{GRAY} | ' +
                         PCOLOR + '━' * math.floor(progress * bar_length) + f'╸{GRAY}' +
                         '━' * math.ceil((1.0 - progress) * bar_length - 1) +
                         f'{GRAY} | {YELLOW}{avg_loss:.4f} {GRAY}|{BLUE} X={avg_errors[0]:.4f}, Y={avg_errors[1]:.4f}{RESET}')
@@ -306,23 +341,25 @@ def train(train_generator, val_generator, quality, lr, epochs, input_size):
         model.trainable = False
         val_loss = 0.0
         total_val_errors = tf.zeros(2)
-        num_val_batches = len(val_generator)
+        num_val_batches = len(val)
         
         # Iterate through each validation batch
         for j in range(num_val_batches):
             try:
                 # Unpack the validation data
                 if mode == 'target':
-                    val_images, val_labels = val_generator[j]
-                    val_outputs = model(val_images, training=False)
+                    val_images, val_labels = val[j]
+                    #val_images = val_images[model_inputs[0]] if len(model_inputs) == 1 else [val_images[name] for name in model_inputs]
+
+                    val_outputs   = model(val_images, training=False)
                 else:
-                    val_inputs, val_labels = val_generator[j]
-                    val_outputs = model(val_inputs, training=False)
+                    val_inputs, val_labels = val[j]
+                    val_outputs   = model(val_inputs, training=False)
                 
                 # Calculate validation loss and errors
-                val_step_loss = loss_fn(val_labels, val_outputs).numpy()
-                val_loss += val_step_loss
-                val_batch_error = tf.reduce_mean(tf.abs(val_outputs - val_labels), axis=0)
+                val_step_loss     = train.loss(val_labels, val_outputs).numpy()
+                val_loss         += val_step_loss
+                val_batch_error   = tf.reduce_mean(tf.abs(val_outputs - val_labels), axis=0)
                 total_val_errors += val_batch_error
             except Exception as e:
                 print(f"\nError processing validation batch {j}: {str(e)}")
@@ -345,86 +382,70 @@ def train(train_generator, val_generator, quality, lr, epochs, input_size):
     model.summary()
 
 
-def get_iris_mid(session_dir, filename, id):
-    image_path = os.path.join(session_dir, filename.replace('f2_', f'f{id}_'))
-    json_path  = os.path.join(session_dir, filename.replace('f2_', f'f{id}_').replace(".png", ".json"))
-    
-    # fallback to f2 when we dont have camera data; however, this must be in ALL cases (we cannot mix)
-    # debug setting here
-    if not os.path.exists(json_path):
-        image_path = os.path.join(session_dir, filename)
-        json_path  = os.path.join(session_dir, filename.replace(".png", ".json"))
-        
+def get_annots(session_dir, filename, id):
+    image_name = filename.replace('f2_', f'f{id}_')
+    image_path = os.path.join(session_dir, image_name)
+    json_path  = os.path.join(session_dir, image_name.replace(".png", ".json"))
+    iris_mid   = None
+    eye_left   = None
+    eye_right  = None
+
     if os.path.exists(json_path):
         with open(json_path, "r") as f:
             json_data = json.load(f)
-            iris_mid  = json_data["labels"][0]["eye-center"]
-            assert os.path.exists(image_path), f'missing camera image {image_path}'
-            return image_path, iris_mid
-    else:
-        print('annotations incomplete in dataset')
-        exit(2)
+            labels    = json_data['labels']
+            iris_mid  = labels.get('iris-mid')
+            eye_left  = labels.get("eye-left")
+            eye_right = labels.get("eye-right")
+    
+    return image_path, iris_mid, eye_left, eye_right
 
 
 def shuffle(
-    dataset_obj:        Any,
-    validation_split:   float   = 0.1,
-    repeat:             int     = 1,
+    dataset_obj: Any,
+    validation_split: float = 0.1,
+    repeat: int = 1
 ) -> Tuple[Any, Any]:
-    # Get all fields that are lists
+    # get all fields that are lists, check for same length
     fields = [field for field in dir(dataset_obj) if (not field.startswith('__') and field != 'train') and isinstance(getattr(dataset_obj, field), list)]
-    
-    # Check all fields have the same length
     field_lengths = [len(getattr(dataset_obj, field)) for field in fields]
     if len(set(field_lengths)) > 1:
         raise ValueError(f"All data fields must have the same length. Got lengths: {field_lengths}")
     
+    # dataset instances
+    train_dataset      = dataset_obj.__class__(True)
+    validation_dataset = dataset_obj.__class__(False)
     if not fields or not field_lengths[0]:
-        # Create empty dataset instances if no data
-        train_dataset = dataset_obj.__class__()
-        validation_dataset = dataset_obj.__class__()
         return train_dataset, validation_dataset
     
     # Extract data from each field
     lists = [getattr(dataset_obj, field) for field in fields]
     
-    # Shuffle dataset
+    # Combine all fields together to maintain alignment
     combined = list(zip(*lists))
+
+    # Shuffle dataset to randomize order
     random.shuffle(combined)
-    shuffled_data = list(zip(*combined))
-    
+
     # Calculate split point
     base_count = len(combined)
     validation_count = round(base_count * validation_split)
     index = base_count - validation_count
+    val_combined = combined[index:]
+
+    # **Repeat Entire Combined Dataset Instead of Individual Fields**
+    train_combined = combined[:index] * repeat  # Repeat whole entries to maintain alignment
+    random.shuffle(train_combined)  # Shuffle again to mix repeated data properly
     
-    # Create new dataset instances
-    train_dataset = dataset_obj.__class__(True)
-    validation_dataset = dataset_obj.__class__(False)
-    
-    # Populate train dataset
+    # Unpack aligned data back into their respective fields
     for i, field in enumerate(fields):
-        train_data = list(shuffled_data[i][:index])
-        
-        # Handle repeating if needed
-        if repeat > 1:
-            train_data = train_data * repeat
-            # Additional shuffle after repeating
-            temp_combined = list(zip(*[train_data]))
-            random.shuffle(temp_combined)
-            train_data = list(zip(*temp_combined))[0]
-            
-        setattr(train_dataset, field, list(train_data))
-    
-    # Populate validation dataset
-    for i, field in enumerate(fields):
-        validation_data = list(shuffled_data[i][index:])
-        setattr(validation_dataset, field, validation_data)
-    
+        setattr(train_dataset, field, [row[i] for row in train_combined])
+        setattr(validation_dataset, field, [row[i] for row in val_combined])
+
     return train_dataset, validation_dataset
 
 
-def center_crop(self, image, size, iris_mid):
+def center_crop(image, size, iris_mid):
     full_size  = image.shape[0]  # square images
     crop_x     = int((iris_mid[0] + 0.5) * full_size)
     crop_y     = int((iris_mid[1] + 0.5) * full_size)
@@ -460,19 +481,23 @@ def center_crop(self, image, size, iris_mid):
 
 class dataset:
     def __init__(self, train):
-        self.train         = train # field 
-        self.f2_image      = [] # we want all of these to line up
-        self.f2_iris_mid   = [] # ...
-        self.f6_image      = [] # ...
-        self.f6_iris_mid   = [] # ...
-        self.image         = []
-        self.iris_mid      = []
+        self.train         = train
+        self.f2_image      = []
+        self.f2_iris_mid   = []
+        self.f2_eye_left   = []
+        self.f2_eye_right  = []
+        self.f6_image      = []
+        self.f6_iris_mid   = []
+        self.f6_eye_left   = []
+        self.f6_eye_right  = []
         self.pixel         = []
+        self.f2_iris_mid_i = []
+        self.f6_iris_mid_i = []
     def __len__(self):
-        return len(self.image)
+        return len(self.f2_image)
     
 class data:
-    def __init__(self, session_ids, validation_split=0.1, repeat=1):
+    def __init__(self, mode, session_ids, validation_split=0.1, repeat=1):
         # do not expose all data at once, that would allow train to leak with validation
         _dataset = dataset(False)
         for session_id in session_ids:
@@ -481,20 +506,42 @@ class data:
             for filename in os.listdir(session_dir):
                 if filename.startswith("f2_") and filename.endswith(".png"):
                     parts = filename.replace(".png", "").split("_")
-                    if len(parts) >= 4:
-                        _, _, pixel_x, pixel_y, _, _, _ = parts
-                        # we need json and image-path for each f2, f6
-                        # this model takes in two images, however should support different ones provided, to turn the inputs on and off (omit from model)
-                        f2_image_path, f2_iris_mid = get_iris_mid(session_dir, filename, 2)
-                        f6_image_path, f6_iris_mid = get_iris_mid(session_dir, filename, 6)
+                    pixel_x = pixel_y = 0
 
-                        _dataset.image      .append(f2_image_path)
-                        _dataset.iris_mid   .append(f2_iris_mid)
-                        _dataset.f2_image   .append(f2_image_path)
-                        _dataset.f2_iris_mid.append(f2_iris_mid)
-                        _dataset.f6_image   .append(f6_image_path)
-                        _dataset.f6_iris_mid.append(f6_iris_mid) # we could also plot the session-id if we want
-                        _dataset.pixel      .append([float(pixel_x), float(pixel_y)])
+                    if len(parts) == 4:
+                        _, _, pixel_x, pixel_y = parts
+                    
+                    elif len(parts) >= 7:
+                        _, _, pixel_x, pixel_y, _, _, _ = parts
+                    else:
+                        continue
+
+                    pixel_x = float(pixel_x) - 0.5
+                    pixel_y = float(pixel_y) - 0.5
+
+                    # we need json and image-path for each f2, f6
+                    # this model takes in two images, however should support different ones provided, to turn the inputs on and off (omit from model)
+                    f2_image_path, f2_iris_mid, f2_eye_left, f2_eye_right = get_annots(session_dir, filename, 2)
+                    f6_image_path, f6_iris_mid, f6_eye_left, f6_eye_right = get_annots(session_dir, filename, 6)
+                    
+                    # based on mode, this will need to be a filter (define on model and give to data?)
+                    # then data->model calls the model?
+                    # it is more direct
+                    if not f2_iris_mid or not f6_iris_mid:
+                        continue
+
+                    _dataset.f2_image     .append(f2_image_path)
+                    _dataset.f2_iris_mid  .append(f2_iris_mid)
+                    _dataset.f2_eye_left  .append(f2_eye_left)
+                    _dataset.f2_eye_right .append(f2_eye_right)
+                    _dataset.f6_image     .append(f6_image_path)
+                    _dataset.f6_iris_mid  .append(f6_iris_mid)
+                    _dataset.f6_eye_left  .append(f6_eye_left)
+                    _dataset.f6_eye_right .append(f6_eye_right)
+                    _dataset.pixel        .append([pixel_x, pixel_y])
+                    _dataset.f2_iris_mid_i.append(None) # this is so the labeler can perform an inference on this image, then store the result for next use (epoch)
+                    _dataset.f6_iris_mid_i.append(None)
+
 
         # we want self.train to contain the same type as _dataset, with its arrays occupied.  shuffle will go through the object fields the user put in (making sure we dont also look at python base fields??)
         self.train, self.validation = shuffle(_dataset, repeat=repeat, validation_split=validation_split)

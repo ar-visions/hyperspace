@@ -5,11 +5,14 @@ import random
 import cv2
 import numpy as np
 import argparse
+from   pathlib import Path
 
 parser = argparse.ArgumentParser(description="Annotate images with click-based labels.")
 parser.add_argument("-s", "--session",   required=True, help="session data (name of session; as named in cwd/sessions dir)")
 parser.add_argument("-a", "--attribute", required=True, help="eye-center label (between eyes on nose bridge)")
 parser.add_argument("-r", "--review",    action="store_true", help="review and edit annotations already made")
+parser.add_argument("-f", "--filter",    default='', type=str, help="only show files with this annotation (applies to ALL camera space!)")
+parser.add_argument("-n", "--n",         action="store_true", help="apply not to filter (only show without)")
 
 args         = parser.parse_args()
 a_name       = args.attribute
@@ -21,6 +24,8 @@ start_x      = 0
 start_y      = 0
 canvas_w     = 0
 canvas_h     = 0
+filter       = args.filter
+is_not       = args.n
 
 def normalize_click(x, y, img_w, img_h):
     return [(x - img_w / 2) / img_w, (y - img_h / 2) / img_h]
@@ -33,36 +38,33 @@ def set_annot(img_path, name, object):
         with open(path, "r") as f:
             json_data = json.load(f)
     else:
-        json_data = {"labels": []}
-
-    updated = False
-    for label in json_data["labels"]:
-        if name in label:
-            label[name] = object
-            updated     = True
-            break
-    if not updated: json_data["labels"].append({name: object})
+        json_data = {"labels": {}}
+    json_data['labels'][name] = object
     with open(path, "w") as f: json.dump(json_data, f, indent=4)
 
-def get_annot(img_path, name):
+def get_annot(img_path, name, any_camera=False):
     path = json_path(img_path)
+    if not os.path.exists(path):
+        if any_camera:
+            p = Path(path)
+            s = p.stem[:3]  # Extract first 3 characters (e.g., "f1_")
+            r = "f6_" if s != "f6_" else "f2_"  # Swap prefix
+            path = str(p.with_name(r + p.stem[3:] + p.suffix))
+            
     if os.path.exists(path):
         with open(path, "r") as f:
             json_data = json.load(f)
-        for label in json_data["labels"]:
-            if name in label:
-                return label[name]
+        return json_data['labels'][name] if name in json_data['labels'] else None
     return None
 
 def on_click(event, x, y, flags, param):
     if event == cv2.EVENT_LBUTTONDOWN:
-        img_path, img_w, img_h = param  # Unpack params
-
-        # Convert click coordinates to (-0.5, 0.5) range
+        img_path, img_w, img_h = param
         norm_x, norm_y = normalize_click(x - start_x, y - start_y, img_w, img_h)
         set_annot(img_path, a_name, [round(norm_x, 4), round(norm_y, 4)])
         dialog['saved'] = True
 
+# we're
 def process_images(image_dir):
     files  = sorted(os.listdir(image_dir))
     index  = 0
@@ -71,8 +73,17 @@ def process_images(image_dir):
     for filename in files:
         if filename.lower().endswith((".png")):
             img_path  = os.path.join(image_dir, filename)
+            #if Path(img_path).stem == 'f6_center-close-10720_0.8977_0.3910':
+            #    img_path = img_path
             json_path = os.path.splitext(img_path)[0] + ".json"
-            if not review and os.path.exists(json_path):
+            #exists    = os.path.exists(json_path)
+            #if not exists and (filter != is_not): continue
+            has_filter = get_annot(img_path, filter, True) # useful feature to check all cameras; this lets us get all annotations for the pairs
+            if filter and ((not has_filter) != is_not):
+                print(f'skipping, has annotation for {filter}')
+                continue
+            has_annot = get_annot(img_path, a_name)
+            if has_annot and not review:
                 continue
             images.append(img_path)
     
