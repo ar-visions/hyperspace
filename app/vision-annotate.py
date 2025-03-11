@@ -5,6 +5,7 @@ import random
 import cv2
 import numpy as np
 import argparse
+import math
 from   pathlib import Path
 
 parser = argparse.ArgumentParser(description="Annotate images with click-based labels.")
@@ -26,6 +27,12 @@ canvas_w     = 0
 canvas_h     = 0
 filter       = args.filter
 is_not       = args.n
+is_scale     = a_name == 'scale'
+mouse_x      = 0
+mouse_y      = 0
+
+# scale always requires iris-mid, so lets make this easy
+if is_scale: filter = 'iris-mid'
 
 def normalize_click(x, y, img_w, img_h):
     return [(x - img_w / 2) / img_w, (y - img_h / 2) / img_h]
@@ -57,19 +64,29 @@ def get_annot(img_path, name, any_camera=False):
         return json_data['labels'][name] if name in json_data['labels'] else None
     return None
 
+scale_save = None
+
 def on_click(event, x, y, flags, param):
+    img_path, img_w, img_h = param
+    if event == cv2.EVENT_MOUSEMOVE:
+        global mouse_x, mouse_y
+        mouse_x, mouse_y = x, y
     if event == cv2.EVENT_LBUTTONDOWN:
-        img_path, img_w, img_h = param
-        norm_x, norm_y = normalize_click(x - start_x, y - start_y, img_w, img_h)
-        set_annot(img_path, a_name, [round(norm_x, 4), round(norm_y, 4)])
+        global scale_save
+        if scale_save:
+            set_annot(img_path, a_name, [round(scale_save, 4)])
+        else:
+            norm_x, norm_y = normalize_click(x - start_x, y - start_y, img_w, img_h)
+            set_annot(img_path, a_name, [round(norm_x, 4), round(norm_y, 4)])
         dialog['saved'] = True
 
-# we're
 def process_images(image_dir):
     files  = sorted(os.listdir(image_dir))
     index  = 0
     images = []
-    #random.shuffle(files)
+    filters = []
+
+    random.shuffle(files)
     for filename in files:
         if filename.lower().endswith((".png")):
             img_path  = os.path.join(image_dir, filename)
@@ -78,14 +95,15 @@ def process_images(image_dir):
             json_path = os.path.splitext(img_path)[0] + ".json"
             #exists    = os.path.exists(json_path)
             #if not exists and (filter != is_not): continue
-            has_filter = get_annot(img_path, filter, True) # useful feature to check all cameras; this lets us get all annotations for the pairs
-            if filter and ((not has_filter) != is_not):
+            filter_data = get_annot(img_path, filter, True) # useful feature to check all cameras; this lets us get all annotations for the pairs
+            if filter and ((not filter_data) != is_not):
                 print(f'skipping, has annotation for {filter}')
                 continue
             has_annot = get_annot(img_path, a_name)
             if has_annot and not review:
                 continue
             images.append(img_path)
+            filters.append(filter_data)
     
     while index < len(images):
         img_path  = images[index]
@@ -102,10 +120,28 @@ def process_images(image_dir):
         canvas[start_y:start_y + img_h, start_x:start_x + img_w] = img
         print(f"showing: {img_path} - annotating {a_name}")
         title     = f'hyperspace:annotate - {a_name}'
+
+
+        cp = canvas.copy()
         cv2.imshow(title, canvas)
         cv2.setMouseCallback(title, on_click, (img_path, img_w, img_h))
 
         while True:
+
+            if is_scale:
+                # Draw the orbiting circle
+                # filter_data <-- is filled out 
+                iris_mid = filters[index]
+                assert iris_mid, "missing iris-mid data (required for plotting target depth)"
+                x = start_x + int(img_w / 2 + iris_mid[0] * img_w)
+                y = start_y + int(img_h / 2 + iris_mid[1] * img_h)
+                r = int(math.sqrt((mouse_x - x) ** 2 + (mouse_y - y) ** 2)) // 2
+                global scale_save
+                scale_save = r / img_w * 2
+                canvas = cp.copy()
+                cv2.circle(canvas, (x, y), r, 255, 1)
+                cv2.imshow(title, canvas)
+                
             key = cv2.waitKey(20) & 0xFF
             if "saved" in dialog:
                 cv2.setMouseCallback(title, lambda *args: None)

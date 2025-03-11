@@ -1,4 +1,5 @@
 import  tensorflow as tf
+from    tensorflow import keras
 from    tensorflow.keras import KerasTensor
 from    tensorflow.keras.layers import InputLayer
 from    tensorflow.keras.regularizers import l2
@@ -27,7 +28,7 @@ RESET  = '\033[0m'
 
 
 
-SEED = 42  # You can change this to any fixed number
+SEED = 242  # You can change this to any fixed number
 
 # Seed Python's built-in random module
 random.seed(SEED)
@@ -46,12 +47,15 @@ os.environ['CUDA_VISIBLE_DEVICES'] = '0'  # Ensures single-GPU determinism (opti
 
 
 # keras-interfacing model, with batch using our data
-class model(tf.keras.utils.Sequence):
+class model(keras.utils.Sequence):
     def __init__(self, mode, data, batch_size):
         self.mode         = mode
         self.data         = data
         self.batch_size   = batch_size
         self.inputs       = []
+
+    def loss(self, y_true, y_pred):
+        return keras.losses.MeanSquaredError()(y_true, y_pred)
 
     # process batch
     def __getitem__(self, batch_index):
@@ -78,18 +82,35 @@ class model(tf.keras.utils.Sequence):
     def model(self):
         assert False, 'user-implement'
 
-
+# export based on quantized state
 def export_part(mode, layer, part, index):
     w = layer.get_weights()
-    if   w[0].dtype == np.float32: weight_ext = '.f32'
-    elif w[0].dtype == np.float16: weight_ext = '.f16'
-    elif w[0].dtype == np.uint8:   weight_ext = '.u8'
-    weights_filename = f"{mode}_{layer.name}_{part}{weight_ext}"
-    with open(weights_filename, 'wb') as f: w[index].tofile(f)
-    return weights_filename
+    weights_id = f"{mode}_{layer.name}_{part}"
+    # check for quantized weights (int8)
+    if hasattr(layer, 'quantize_config'):
+        # Extract scale and zero-point from quantized layers
+        if hasattr(layer, 'get_quantize_params'):
+            scale = layer.get_quantize_params().get("scale", 1.0)
+            zero_point = layer.get_quantize_params().get("zero_point", 0)
+        else:
+            scale = 1.0
+            zero_point = 0
+        # extract scale and zero-point from quantized layers
+        #scale      = layer.get_quantize_params().get("scale",      1.0)  # Default to 1.0 if missing
+        #zero_point = layer.get_quantize_params().get("zero_point", 0)    # Default to 0
+        with open('%s.i8' % weights_id, 'wb') as f:
+            np.array(scale, dtype=np.float32).tofile(f)      # Store scale
+            np.array(zero_point, dtype=np.float32).tofile(f) # Store zero-point
+            w[index].astype(np.int8).tofile(f)               # Store quantized weights
+    else:
+        # default float weight export
+        with open('%s.f32' % weights_id, 'wb') as f:
+            w[index].tofile(f)
 
-def export_json(model, mode, output_json_path, quality, input_size):
-    return
+    return weights_id
+
+def export_json(model, mode, output_json_path, input_shapes):
+    #return
     layers_dict = OrderedDict()
     output_shapes = {}
     # Function to get layer type
@@ -106,13 +127,13 @@ def export_json(model, mode, output_json_path, quality, input_size):
             return layer_class
     
     # Run a sample inference to ensure all shapes are computed
-    if mode == 'target':
-        sample_input  = np.zeros((1, input_size, input_size, 1))
-        _ = model(sample_input)
-    else:
-        sample_image  = np.zeros((1, input_size, input_size, 1))
-        sample_iris_mid = np.zeros((1, 2))
-        _ = model([sample_image, sample_iris_mid])
+    #if mode == 'target':
+    #    sample_input  = np.zeros((1, input_size, input_size, 1))
+    #    _ = model(sample_input)
+    #else:
+    #    sample_image  = np.zeros((1, input_size, input_size, 1))
+    #    sample_iris_mid = np.zeros((1, 2))
+    #    _ = model([sample_image, sample_iris_mid])
     
     def input_shape(layer):
         if hasattr(layer.input, 'shape'):
@@ -146,6 +167,7 @@ def export_json(model, mode, output_json_path, quality, input_size):
         if   layer_class == 'InputLayer':
             layers_dict[layer.name].update({
                 "Type":         "input",
+                "input":        input_shapes
             })
         elif layer_class == 'Conv2D':
             layers_dict[layer.name].update({
@@ -155,7 +177,9 @@ def export_json(model, mode, output_json_path, quality, input_size):
                 "in_channels":  idim,
                 "out_channels": layer.filters,
                 "kernel_size":  list(layer.kernel_size),
+                "strides":      list(layer.strides),
                 "padding":      layer.padding,
+                "activation":   layer.activation.__name__,
                 "weights":      export_part(mode, layer, 'weights', 0),  # Kernel weights
                 "bias":         export_part(mode, layer, 'bias',    1) # initial value in the accumulator in gemm
             })
@@ -165,8 +189,8 @@ def export_json(model, mode, output_json_path, quality, input_size):
                 "inputs":        [],
                 "tensor":        [ishape] if ishape is not None else [],
                 "type":         "max",
-                "kernel_size":  list(layer.pool_size),
-                "stride":       list(layer.strides)
+                "pool_size":    list(layer.pool_size),
+                "strides":      list(layer.strides)
             })
         elif layer_class == 'Dense':
             layers_dict[layer.name].update({
@@ -175,6 +199,7 @@ def export_json(model, mode, output_json_path, quality, input_size):
                 "tensor":        [ishape] if ishape is not None else [],
                 "input_dim":    idim,
                 "output_dim":   layer.units,
+                "activation":   layer.activation.__name__,
                 "weights":      export_part(mode, layer, 'weights', 0),
                 "bias":         export_part(mode, layer, 'bias', 1)
             })
@@ -201,55 +226,26 @@ def export_json(model, mode, output_json_path, quality, input_size):
         else:
             print(f'ai: implement layer_class: {layer_class}')
         
-    # Build a separate dictionary to track which layers output to which other layers
-    # This won't be exported but is used to find terminal nodes
-    output_connections = {layer_name: [] for layer_name in layers_dict.keys()}
-    model_config = model.get_config()
-    if 'layers' in model_config:
-        for layer_config in model_config['layers']:
-            layer_name = layer_config.get('name')
-            if layer_name not in layers_dict:
-                continue
-            if 'inbound_nodes' in layer_config and layer_config['inbound_nodes']:
-                for node in layer_config['inbound_nodes']:
-                    for inbound_info in node:
-                        if isinstance(inbound_info, list) and len(inbound_info) > 0:
-                            source_layer = inbound_info[0]
-                            if source_layer not in layers_dict[layer_name]["inputs"]:
-                                layers_dict[layer_name]["inputs"].append(source_layer)
-                            if source_layer in output_connections:
-                                output_connections[source_layer].append(layer_name)
-    
-    # If the above doesn't work, try direct inspection
-    #if all(len(layer_info["inputs"]) == 0 for layer_info in layers_dict.values() if not 'Type' in layer_info or layer_info["Type"] != "input"):
-    for i, layer in enumerate(model.layers):
-        if i > 0:  # Skip the first layer (usually input)
-            input_tensors = layer.input
-            if isinstance(input_tensors, list):
-                for input_tensor in input_tensors:
-                    for prev_layer in model.layers:
-                        if prev_layer.output is input_tensor:
-                            layers_dict[layer.name]["inputs"].append(prev_layer.name)
-                            output_connections[prev_layer.name].append(layer.name)
-            else:
-                for prev_layer in model.layers:
-                    if prev_layer.output is input_tensors:
-                        layers_dict[layer.name]["inputs"].append(prev_layer.name)
-                        output_connections[prev_layer.name].append(layer.name)
-    
-    # If still no connections, use a last resort approach
-    #if all(len(layer_info["inputs"]) == 0 for layer_info in layers_dict.values() if layer_info["Type"] != "input"):
-    for i in range(1, len(model.layers)):
-        current_layer = model.layers[i]
-        prev_layer    = model.layers[i - 1]
-        layers_dict[current_layer.name]["inputs"].append(prev_layer.name)
-        output_connections[prev_layer.name].append(current_layer.name)
-    
-    # Find terminal nodes (layers that don't output to any other layer)
-    remaining_nodes = []
-    for layer_name, outputs in output_connections.items():
-        if len(outputs) == 0 and layer_name in layers_dict:
-            remaining_nodes.append(layer_name)
+
+        # Dictionary to track which layers output to which others
+        output_connections = {layer.name: set() for layer in model.layers}
+
+    # Process layers once to extract inputs
+    for layer in model.layers:
+        # Gather unique input layers
+        input_layers = set()
+
+        # Use model's internal config to extract connections
+        for node in layer._inbound_nodes:
+            for inbound_layer in getattr(node, 'inbound_layers', []):
+                input_layers.add(inbound_layer.name)
+                output_connections[inbound_layer.name].add(layer.name)
+
+        # Save the unique inputs to the layer dictionary
+        layers_dict[layer.name]["inputs"] = list(input_layers)
+
+    # Identify terminal nodes (layers that do not output to any others)
+    remaining_nodes = [layer for layer in layers_dict if not output_connections[layer]]
     
     assert len(remaining_nodes), "endless loop"
     output_tensor = []
@@ -265,8 +261,6 @@ def export_json(model, mode, output_json_path, quality, input_size):
     ops        = list(layers_dict.values())
     model_json = {
         "ident":            mode,
-        "quality":          quality,
-        "input":            [[input_size, input_size, 1]] if mode == 'target' else [[input_size, input_size, 1], [2]],
         "output":           [[2]],
         "ops":              ops
     }
@@ -276,43 +270,49 @@ def export_json(model, mode, output_json_path, quality, input_size):
         json.dump(model_json, f, indent=4)
 
 
-def train(train, val, quality, lr, epochs, input_size):
-    model = train.model(quality)
+def train(train, val, final, lr, epochs):
+    model = train.model()
+    model.summary()
 
     # prevent boilerplate with this round-about input binding
     train.inputs = []
     for layer in model.layers:
         if isinstance(layer, InputLayer):
             train.inputs.append(layer.name)
-    model_inputs = train.inputs
     val.inputs   = train.inputs
-
+    final.inputs = train.inputs
     # Set up optimizer
-    optimizer = tf.keras.optimizers.Adam(learning_rate=lr)
+    optimizer = keras.optimizers.Adam(learning_rate=lr)
     bar_length = 40
+    input_shape = None
+    output_dim = model.output_shape[-1]
 
-    # Training and validation loops
+    # training and validation loops
     for epoch in range(epochs):
-        # Training phase
+        final_epochs = epoch >= (epochs // 2)
+        f_train = final if final_epochs else train
         model.trainable = True
         total_loss = 0.0
-        total_errors = tf.zeros(2)  # Accumulate total X, Y errors
-        num_batches = len(train)
+        total_errors = tf.zeros(output_dim)  # Accumulate total X, Y errors
+        num_batches = len(f_train)
         mode = train.__class__.__name__
-
+        
+        #if final_epochs: print('final epochs mode')
         for i in range(num_batches):
-            # Get the data for this batch
             try:
-                data, labels = train[i]
-                inputs = {}
-                for name in model_inputs:
+                data, labels = f_train[i]
+                inputs   = {}
+                for name in f_train.inputs:
                     inputs[name] = data[name]
+                if not input_shape:
+                    input_shape = [inputs[name].shape[1:] for name in f_train.inputs]
+                
                 outputs = model(inputs, training=True)
 
                 # forward pass and calculate gradients
                 with tf.GradientTape() as tape:
                     outputs = model(inputs, training=True)
-                    loss    = train.loss(labels, outputs)
+                    loss    = f_train.loss(labels, outputs)
                 
                 # Backward pass and update weights
                 gradients = tape.gradient(loss, model.trainable_variables)
@@ -327,21 +327,24 @@ def train(train, val, quality, lr, epochs, input_size):
                 avg_errors    = (total_errors / (i + 1)).numpy()
                 fin           = progress >= 0.9999
                 PCOLOR        = GREEN if fin else CYAN
-                status        = (f'\r{YELLOW}training {GRAY}{BLUE}{epoch+1:4}/{epochs:4}{GRAY} | ' +
+                final_training = 'finalize' if final_epochs else 'training'
+                labels = ['X', 'Y', 'Z', 'W', 'AA', 'BB', 'CC'][:len(avg_errors)]  # Only take as many labels as needed
+                error_str = ", ".join(f"{label}={error:.4f}" for label, error in zip(labels, avg_errors))
+                status        = (f'\r{YELLOW}{final_training} {GRAY}{BLUE}{epoch+1:4}/{epochs:4}{GRAY} | ' +
                         PCOLOR + '━' * math.floor(progress * bar_length) + f'╸{GRAY}' +
                         '━' * math.ceil((1.0 - progress) * bar_length - 1) +
-                        f'{GRAY} | {YELLOW}{avg_loss:.4f} {GRAY}|{BLUE} X={avg_errors[0]:.4f}, Y={avg_errors[1]:.4f}{RESET}')
+                        f'{GRAY} | {YELLOW}{avg_loss:.4f} {GRAY}|{BLUE} {error_str}{RESET}')
                 
                 print(status, end='')
             except Exception as e:
-                print(f"\nError processing batch {i}: {str(e)}")
+                print(f"\nerror processing batch {i}: {str(e)}")
                 continue
         
         # Validation phase
-        model.trainable = False
-        val_loss = 0.0
-        total_val_errors = tf.zeros(2)
-        num_val_batches = len(val)
+        model.trainable  = False
+        val_loss         = 0.0
+        total_val_errors = tf.zeros(output_dim)
+        num_val_batches  = len(val)
         
         # Iterate through each validation batch
         for j in range(num_val_batches):
@@ -374,12 +377,14 @@ def train(train, val, quality, lr, epochs, input_size):
             avg_val_errors = [0, 0]
         
         # Print validation results on a new line
+        labels = ['X', 'Y', 'Z', 'W', 'AA', 'BB', 'CC'][:len(avg_val_errors)]  # Only take as many labels as needed
+        error_str = ", ".join(f"{label}={error:.4f}" for label, error in zip(labels, avg_val_errors))
+    
         print(f'\n{BLUE}validate' + ' ' * 57 +
-              f'{avg_val_loss:.4f} {GRAY}|{PURPLE} X={avg_val_errors[0]:.4f}, Y={avg_val_errors[1]:.4f}{RESET}\n')
+              f'{avg_val_loss:.4f} {GRAY}|{PURPLE} {error_str}{RESET}\n')
     
     model.save(f'vision_{mode}.keras')
-    export_json(model, mode, f'vision_{mode}.json', quality, input_size) # todo: read the inputs from model!
-    model.summary()
+    export_json(model, mode, f'vision_{mode}.json', input_shape)
 
 
 def get_annots(session_dir, filename, id):
@@ -389,7 +394,7 @@ def get_annots(session_dir, filename, id):
     iris_mid   = None
     eye_left   = None
     eye_right  = None
-
+    scale      = None
     if os.path.exists(json_path):
         with open(json_path, "r") as f:
             json_data = json.load(f)
@@ -397,8 +402,9 @@ def get_annots(session_dir, filename, id):
             iris_mid  = labels.get('iris-mid')
             eye_left  = labels.get("eye-left")
             eye_right = labels.get("eye-right")
-    
-    return image_path, iris_mid, eye_left, eye_right
+            scale     = labels.get("scale")
+
+    return image_path, iris_mid, eye_left, eye_right, scale
 
 
 def shuffle(
@@ -479,6 +485,8 @@ def center_crop(image, size, iris_mid):
         cv2.BORDER_CONSTANT, value=0)
     return padded_crop
 
+import copy
+
 class dataset:
     def __init__(self, train):
         self.train         = train
@@ -486,18 +494,71 @@ class dataset:
         self.f2_iris_mid   = []
         self.f2_eye_left   = []
         self.f2_eye_right  = []
+        self.f2_scale      = []
         self.f6_image      = []
         self.f6_iris_mid   = []
         self.f6_eye_left   = []
         self.f6_eye_right  = []
+        self.f6_scale      = []
         self.pixel         = []
         self.f2_iris_mid_i = []
         self.f6_iris_mid_i = []
     def __len__(self):
         return len(self.f2_image)
-    
+    def copy(self): return copy.deepcopy(self)
+
+    def augment_final(self, magnitude=0):
+        """Appends data from train to final when iris_mid[0] > 0.5."""
+        independent = self.f2_iris_mid.copy()
+        for m in range(magnitude):
+            for index, iris_mid in enumerate(independent):  
+                if abs(iris_mid[0]) > 0.33 or abs(iris_mid[1]) > 0.33:  # set on model, the caller has access
+                    # Append data from self.train to all lists in self.final
+                    self.f2_image.append(self.f2_image[index])
+                    self.f2_iris_mid.append(self.f2_iris_mid[index])
+                    self.f2_eye_left.append(self.f2_eye_left[index])
+                    self.f2_eye_right.append(self.f2_eye_right[index])
+                    self.f2_scale.append(self.f2_scale[index])
+                    self.f6_image.append(self.f6_image[index])
+                    self.f6_iris_mid.append(self.f6_iris_mid[index])
+                    self.f6_eye_left.append(self.f6_eye_left[index])
+                    self.f6_eye_right.append(self.f6_eye_right[index])
+                    self.f6_scale.append(self.f6_scale[index])
+                    self.pixel.append(self.pixel[index])
+                    self.f2_iris_mid_i.append(self.f2_iris_mid_i[index])
+                    self.f6_iris_mid_i.append(self.f6_iris_mid_i[index])
+
+    def shuffle_data(self):
+        """Shuffles all lists together to maintain data integrity."""
+        combined = list(zip(
+            self.f2_image, self.f2_iris_mid, self.f2_eye_left, self.f2_eye_right, self.f2_scale,
+            self.f6_image, self.f6_iris_mid, self.f6_eye_left, self.f6_eye_right, self.f6_scale,
+            self.pixel, self.f2_iris_mid_i, self.f6_iris_mid_i
+        ))
+        np.random.shuffle(combined)  # Shuffle while keeping lists aligned
+        (
+            self.f2_image, self.f2_iris_mid, self.f2_eye_left, self.f2_eye_right, self.f2_scale,
+            self.f6_image, self.f6_iris_mid, self.f6_eye_left, self.f6_eye_right, self.f6_scale,
+            self.pixel, self.f2_iris_mid_i, self.f6_iris_mid_i
+        ) = zip(*combined)  # Unpack back to separate lists
+
+        # Convert back to lists after shuffling
+        self.f2_image       = list(self.f2_image)
+        self.f2_iris_mid    = list(self.f2_iris_mid)
+        self.f2_eye_left    = list(self.f2_eye_left)
+        self.f2_eye_right   = list(self.f2_eye_right)
+        self.f2_scale       = list(self.f2_scale)
+        self.f6_image       = list(self.f6_image)
+        self.f6_iris_mid    = list(self.f6_iris_mid)
+        self.f6_eye_left    = list(self.f6_eye_left)
+        self.f6_eye_right   = list(self.f6_eye_right)
+        self.f6_scale       = list(self.f6_scale)
+        self.pixel          = list(self.pixel)
+        self.f2_iris_mid_i  = list(self.f2_iris_mid_i)
+        self.f6_iris_mid_i  = list(self.f6_iris_mid_i)
+
 class data:
-    def __init__(self, mode, session_ids, validation_split=0.1, repeat=1):
+    def __init__(self, mode, session_ids, required_fields, validation_split=0.1, final_magnitude=1, repeat=1):
         # do not expose all data at once, that would allow train to leak with validation
         _dataset = dataset(False)
         for session_id in session_ids:
@@ -521,27 +582,64 @@ class data:
 
                     # we need json and image-path for each f2, f6
                     # this model takes in two images, however should support different ones provided, to turn the inputs on and off (omit from model)
-                    f2_image_path, f2_iris_mid, f2_eye_left, f2_eye_right = get_annots(session_dir, filename, 2)
-                    f6_image_path, f6_iris_mid, f6_eye_left, f6_eye_right = get_annots(session_dir, filename, 6)
+                    f2_image_path, f2_iris_mid, f2_eye_left, f2_eye_right, f2_scale = get_annots(session_dir, filename, 2)
+                    f6_image_path, f6_iris_mid, f6_eye_left, f6_eye_right, f6_scale = get_annots(session_dir, filename, 6)
                     
                     # based on mode, this will need to be a filter (define on model and give to data?)
                     # then data->model calls the model?
                     # it is more direct
-                    if not f2_iris_mid or not f6_iris_mid:
-                        continue
+                    #if not f2_iris_mid or not f6_iris_mid or not f2_scale or not f6_scale:
+                    #    continue
+                    require_both = mode == 'track'
+                    use_f2  = (not 'iris_mid'  in required_fields or f2_iris_mid  is not None) and \
+                              (not 'eye_left'  in required_fields or f2_eye_left  is not None) and \
+                              (not 'eye_right' in required_fields or f2_eye_right is not None) and \
+                              (not 'scale'     in required_fields or f2_scale     is not None)
 
-                    _dataset.f2_image     .append(f2_image_path)
-                    _dataset.f2_iris_mid  .append(f2_iris_mid)
-                    _dataset.f2_eye_left  .append(f2_eye_left)
-                    _dataset.f2_eye_right .append(f2_eye_right)
+                    use_f6  = (not 'iris_mid'  in required_fields or f6_iris_mid  is not None) and \
+                              (not 'eye_left'  in required_fields or f6_eye_left  is not None) and \
+                              (not 'eye_right' in required_fields or f6_eye_right is not None) and \
+                              (not 'scale'     in required_fields or f6_scale is not None)
+
+                    # some models require both inupts, so we must also support those modes
+                    if (require_both and (not use_f2 or not use_f6)) or (not use_f2 and not use_f6):
+                        continue
+                    
+                    # we always make 2 sets of dataset entries, f2 and f6's so they are always lined up. when we dont have the data we must do this
+                    if not use_f2:
+                        f2_image_path = f6_image_path
+                        f2_iris_mid   = f6_iris_mid
+                        f2_eye_left   = f6_eye_left
+                        f2_eye_right  = f6_eye_right
+                        f2_scale      = f6_scale
+                        use_f2        = True
+                    
+                    if use_f2:
+                        _dataset.f2_image     .append(f2_image_path)
+                        _dataset.f2_iris_mid  .append(f2_iris_mid)
+                        _dataset.f2_eye_left  .append(f2_eye_left)
+                        _dataset.f2_eye_right .append(f2_eye_right)
+                        _dataset.f2_scale     .append(f2_scale)
+                        _dataset.f2_iris_mid_i.append(None) # this is so the labeler can perform an inference on this image, then store the result for next use (epoch)
+                        if not use_f6:
+                            f6_image_path = f2_image_path
+                            f6_iris_mid   = f2_iris_mid
+                            f6_eye_left   = f2_eye_left
+                            f6_eye_right  = f2_eye_right
+                            f6_scale      = f2_scale
+
                     _dataset.f6_image     .append(f6_image_path)
                     _dataset.f6_iris_mid  .append(f6_iris_mid)
                     _dataset.f6_eye_left  .append(f6_eye_left)
                     _dataset.f6_eye_right .append(f6_eye_right)
-                    _dataset.pixel        .append([pixel_x, pixel_y])
-                    _dataset.f2_iris_mid_i.append(None) # this is so the labeler can perform an inference on this image, then store the result for next use (epoch)
+                    _dataset.f6_scale     .append(f6_scale)
                     _dataset.f6_iris_mid_i.append(None)
+
+                    _dataset.pixel        .append([pixel_x, pixel_y])
 
 
         # we want self.train to contain the same type as _dataset, with its arrays occupied.  shuffle will go through the object fields the user put in (making sure we dont also look at python base fields??)
         self.train, self.validation = shuffle(_dataset, repeat=repeat, validation_split=validation_split)
+        self.final = self.train.copy()
+        self.final.augment_final(final_magnitude)
+        self.final.shuffle_data()

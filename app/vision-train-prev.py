@@ -446,19 +446,12 @@ def train(model, train_generator, val_generator, epochs):
         for i in range(num_batches):
             # Get the data for this batch
             try:
-                if mode == 'target':
-                    images, labels = train_generator[i]
-                    outputs = model(images, training=True)
-                else:
-                    inputs, labels = train_generator[i]  # inputs is a dictionary
-                    outputs = model(inputs, training=True)  # pass the dictionary directly
-                
+                images, labels = train_generator[i]
+                outputs = model(images, training=True)
+
                 # Forward pass and calculate gradients
                 with tf.GradientTape() as tape:
-                    if mode == 'target':
-                        outputs = model(images, training=True)
-                    else:
-                        outputs = model(inputs, training=True)
+                    outputs = model(inputs, training=True)
                     loss = loss_fn(labels, outputs)
                 
                 # Backward pass and update weights

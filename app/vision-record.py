@@ -53,7 +53,7 @@ pip_x, pip_y = screen_width - pip_width - int(camera_width * pip_pad), screen_he
 session      = args.session
 
 def random_bg_color():
-    g = random.randint(0, 64)
+    g = 32 # random.randint(0, 64)
     return np.full((screen_height, screen_width), g, dtype=np.uint8)
 
 def generate_hash_id():
@@ -160,21 +160,56 @@ selected6 = None
 # 
 ##
 
-def write(id, image):
-    filename = f"sessions/{session}/f{id}_{session}-{frame_count:04d}_{eye_x/screen_width:.4f}_{eye_y/screen_height:.4f}.png"
-    cv2.imwrite(filename, image, [cv2.IMWRITE_PNG_COMPRESSION, 9])
-    print(f"saved: {filename}")
-
 interval    = 4
 recording   = False
 last_space  = 0
-center_x       = random.randint(0, screen_width)
-center_y       = random.randint(0, screen_height)
+center_x    = random.randint(0, screen_width)
+center_y    = random.randint(0, screen_height)
+offset_iter = 0
+offset_x    = 0
+offset_y    = 0
 eye_x          = 0
 eye_y          = 0
 
-center_x, center_y = eye_x, eye_y
 
+def update_center_offset():
+    global center_x, center_y
+    global offset_x, offset_y
+    global offset_iter
+    offset_iter += 1
+    if offset_iter > 8:
+        center_x    = random.randint(0,   screen_width)
+        center_y    = random.randint(0,   screen_height)
+        offset_iter = 0
+    offset_x       = random.randint(-screen_width  // 4, +screen_width // 4) # distribute in a 16:9 uniform
+    offset_y       = random.randint(-screen_height // 4, +screen_height // 4)
+    
+    # lets not prefer the edges, this will bias our accuracy to the bottom of the screen
+    for i in range(8):
+        if center_x + offset_x < 0 or center_x + offset_x > screen_width:
+            offset_x = random.randint(-screen_width  // 4, +screen_width // 4)
+        if center_y + offset_y < 0 or center_y + offset_y > screen_height:
+            offset_y = random.randint(-screen_height  // 4, +screen_height // 4)
+    
+    # constrain offset_x to not go out of bounds
+    if center_x + offset_x < 0: offset_x = -center_x
+    if center_y + offset_y < 0: offset_y = -center_y
+    if center_x + offset_x > screen_width:  offset_x = screen_width - center_x
+    if center_y + offset_y > screen_height: offset_y = screen_height - center_y
+
+update_center_offset()
+
+def write(id, image):
+    cen_x = center_x / screen_width
+    cen_y = center_y / screen_height
+    off_x = offset_x / screen_width
+    off_y = offset_y / screen_height
+    filename = f"sessions/{session}/f{id}_{session}-{frame_count:04d}_{cen_x + off_x:.4f}_{cen_y + off_y:.4f}.png"
+    cv2.imwrite(filename, image, [cv2.IMWRITE_PNG_COMPRESSION, 9])
+    json = filename.replace(".png", ".json")
+    with open(json, 'w') as f:
+        f.write(f'{{"labels":{{"center":[{cen_x:.4f}, {cen_y:.4f}], "offset": [{off_x:.4f}, {off_y:.4f}]}}}}')
+    print(f"saved: {filename}")
 
 # Define the orbit parameters
 orbit_radius = 200  # Distance from the main circle
@@ -208,33 +243,24 @@ while True:
     selected6, pip_frame6 = cam6.read()
     blended_frame[pip_y:pip_y+pip_height, pip_x:pip_x+pip_width] = pip_frame6
 
-    cv2.circle(blended_frame, (center_x, center_y), 2, 255, 2)  # -1 thickness fills the circle
-
-
-    # Calculate angle based on time
-    angle = (t % orbit_period) / orbit_period * 2 * np.pi  # Convert time to angle in radians
-
-    # Calculate the orbiting circle position
-    orbit_x = int(center_x + orbit_radius * np.cos(angle))
-    orbit_y = int(center_y + orbit_radius * np.sin(angle))
-
-    # Draw the orbiting circle
-    cv2.circle(blended_frame, (orbit_x, orbit_y), 4, 255, -1)  # Filled orbiting circle
+    cv2.circle(blended_frame, (center_x, center_y), 32, 160, 1)  # -1 thickness fills the circle
+    cv2.circle(blended_frame, (center_x + offset_x, center_y + offset_y), 4, 255, 1)  # -1 thickness fills the circle
 
     cv2.imshow(title, blended_frame)
     frame_count += 1
     
-    print(f'mic: {mic_level}')
+    #print(f'mic: {mic_level}')
     key          = cv2.waitKey(10) & 0xFF
     current_ticks = int(time.time() * 1000)  # Current time in milliseconds
     
     # Handle spacebar with cooldown
     if key == 32 and (current_ticks - last_space > 500):
-        recording = not recording
+        #recording = not recording
         last_space = current_ticks
         if not recording:
-            center_x  = random.randint(0,   screen_width)
-            center_y  = random.randint(0,   screen_height)
+            write(2, selected2)
+            write(6, selected6)
+            update_center_offset()
 
     if key == 27: break # esc
 
