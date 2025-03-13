@@ -181,8 +181,8 @@ def update_center_offset():
         center_x    = random.randint(0,   screen_width)
         center_y    = random.randint(0,   screen_height)
         offset_iter = 0
-    offset_x       = random.randint(-screen_width  // 4, +screen_width // 4) # distribute in a 16:9 uniform
-    offset_y       = random.randint(-screen_height // 4, +screen_height // 4)
+    offset_x = random.randint(-screen_width  // 4, +screen_width // 4) # distribute in a 16:9 uniform
+    offset_y = random.randint(-screen_height // 4, +screen_height // 4)
     
     # lets not prefer the edges, this will bias our accuracy to the bottom of the screen
     for i in range(8):
