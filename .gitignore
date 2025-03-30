@@ -5,7 +5,6 @@ debug
 *.frag.spv
 *.vert.spv
 *.keras
-*.json
 *.pth
 *.f32
 human.bin
@@ -24,3 +23,4 @@ rubiks*
 *.css
 *.blend
 *.pyc
+__pycache__

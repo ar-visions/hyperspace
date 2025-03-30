@@ -1,0 +1,131 @@
+{
+    "ident": "eyes",
+    "output": [
+        [
+            2
+        ]
+    ],
+    "ops": [
+        {
+            "name": "image",
+            "Type": "input",
+            "tensor": [
+                [
+                    32,
+                    32,
+                    1
+                ]
+            ],
+            "inputs": []
+        },
+        {
+            "name": "conv0",
+            "Type": "conv",
+            "inputs": [
+                "image"
+            ],
+            "tensor": [
+                [
+                    32,
+                    32,
+                    1
+                ]
+            ],
+            "in_channels": 1,
+            "out_channels": 32,
+            "kernel_size": [
+                5,
+                5
+            ],
+            "strides": [
+                1,
+                1
+            ],
+            "padding": "same",
+            "activation": "relu",
+            "weights": "eyes_conv0_weights",
+            "bias": "eyes_conv0_bias"
+        },
+        {
+            "name": "pool0",
+            "Type": "pool",
+            "inputs": [
+                "conv0"
+            ],
+            "tensor": [
+                [
+                    32,
+                    32,
+                    32
+                ]
+            ],
+            "type": "max",
+            "pool_size": [
+                2,
+                2
+            ],
+            "strides": [
+                2,
+                2
+            ]
+        },
+        {
+            "name": "flatten",
+            "Type": "flatten",
+            "inputs": [
+                "pool0"
+            ],
+            "tensor": [
+                [
+                    16,
+                    16,
+                    32
+                ]
+            ]
+        },
+        {
+            "name": "dense0",
+            "Type": "dense",
+            "inputs": [
+                "flatten"
+            ],
+            "tensor": [
+                [
+                    8192
+                ]
+            ],
+            "input_dim": 8192,
+            "output_dim": 64,
+            "activation": "relu",
+            "weights": "eyes_dense0_weights",
+            "bias": "eyes_dense0_bias"
+        },
+        {
+            "name": "dense1",
+            "Type": "dense",
+            "inputs": [
+                "dense0"
+            ],
+            "tensor": [
+                [
+                    64
+                ]
+            ],
+            "input_dim": 64,
+            "output_dim": 5,
+            "activation": "linear",
+            "weights": "eyes_dense1_weights",
+            "bias": "eyes_dense1_bias"
+        },
+        {
+            "name": "output",
+            "Type": "output",
+            "inputs": [
+                "dense1"
+            ],
+            "tensor": [
+                5
+            ]
+        }
+    ]
+}

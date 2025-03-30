@@ -1,0 +1,270 @@
+{
+    "ident": "track",
+    "output": [
+        [
+            2
+        ]
+    ],
+    "ops": [
+        {
+            "name": "channels",
+            "Type": "input",
+            "tensor": [
+                [
+                    32,
+                    32,
+                    6
+                ],
+                [
+                    2
+                ],
+                [
+                    2
+                ],
+                [
+                    2
+                ],
+                [
+                    2
+                ]
+            ],
+            "inputs": []
+        },
+        {
+            "name": "conv0",
+            "Type": "depthwise_conv",
+            "inputs": [
+                "channels"
+            ],
+            "tensor": [
+                [
+                    32,
+                    32,
+                    6
+                ]
+            ],
+            "in_channels": 6,
+            "depth_multiplier": 64,
+            "out_channels": 384,
+            "kernel_size": [
+                5,
+                5
+            ],
+            "strides": [
+                1,
+                1
+            ],
+            "padding": "same",
+            "activation": "relu",
+            "weights": "track_conv0_depthwise_kernel",
+            "bias": "track_conv0_bias"
+        },
+        {
+            "name": "pool1",
+            "Type": "pool",
+            "inputs": [
+                "conv0"
+            ],
+            "tensor": [
+                [
+                    32,
+                    32,
+                    384
+                ]
+            ],
+            "type": "max",
+            "pool_size": [
+                2,
+                2
+            ],
+            "strides": [
+                2,
+                2
+            ]
+        },
+        {
+            "name": "flatten",
+            "Type": "flatten",
+            "inputs": [
+                "pool1"
+            ],
+            "tensor": [
+                [
+                    16,
+                    16,
+                    384
+                ]
+            ]
+        },
+        {
+            "name": "f2_eye_left",
+            "Type": "input",
+            "tensor": [
+                [
+                    32,
+                    32,
+                    6
+                ],
+                [
+                    2
+                ],
+                [
+                    2
+                ],
+                [
+                    2
+                ],
+                [
+                    2
+                ]
+            ],
+            "inputs": []
+        },
+        {
+            "name": "f6_eye_left",
+            "Type": "input",
+            "tensor": [
+                [
+                    32,
+                    32,
+                    6
+                ],
+                [
+                    2
+                ],
+                [
+                    2
+                ],
+                [
+                    2
+                ],
+                [
+                    2
+                ]
+            ],
+            "inputs": []
+        },
+        {
+            "name": "f2_eye_right",
+            "Type": "input",
+            "tensor": [
+                [
+                    32,
+                    32,
+                    6
+                ],
+                [
+                    2
+                ],
+                [
+                    2
+                ],
+                [
+                    2
+                ],
+                [
+                    2
+                ]
+            ],
+            "inputs": []
+        },
+        {
+            "name": "f6_eye_right",
+            "Type": "input",
+            "tensor": [
+                [
+                    32,
+                    32,
+                    6
+                ],
+                [
+                    2
+                ],
+                [
+                    2
+                ],
+                [
+                    2
+                ],
+                [
+                    2
+                ]
+            ],
+            "inputs": []
+        },
+        {
+            "name": "concat",
+            "Type": "concatenate",
+            "inputs": [
+                "flatten",
+                "f2_eye_left",
+                "f6_eye_left",
+                "f2_eye_right",
+                "f6_eye_right"
+            ],
+            "tensor": [],
+            "axis": -1
+        },
+        {
+            "name": "dense0",
+            "Type": "dense",
+            "inputs": [
+                "concat"
+            ],
+            "tensor": [
+                [
+                    98312
+                ]
+            ],
+            "input_dim": 98312,
+            "output_dim": 64,
+            "activation": "relu",
+            "weights": "track_dense0_weights",
+            "bias": "track_dense0_bias"
+        },
+        {
+            "name": "dense1",
+            "Type": "dense",
+            "inputs": [
+                "dense0"
+            ],
+            "tensor": [
+                [
+                    64
+                ]
+            ],
+            "input_dim": 64,
+            "output_dim": 16,
+            "activation": "relu",
+            "weights": "track_dense1_weights",
+            "bias": "track_dense1_bias"
+        },
+        {
+            "name": "dense2",
+            "Type": "dense",
+            "inputs": [
+                "dense1"
+            ],
+            "tensor": [
+                [
+                    16
+                ]
+            ],
+            "input_dim": 16,
+            "output_dim": 4,
+            "activation": "linear",
+            "weights": "track_dense2_weights",
+            "bias": "track_dense2_bias"
+        },
+        {
+            "name": "output",
+            "Type": "output",
+            "inputs": [
+                "dense2"
+            ],
+            "tensor": [
+                4
+            ]
+        }
+    ]
+}

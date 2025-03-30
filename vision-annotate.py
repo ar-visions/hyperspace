@@ -31,9 +31,6 @@ is_scale     = a_name == 'scale'
 mouse_x      = 0
 mouse_y      = 0
 
-# scale always requires iris-mid, so lets make this easy
-if is_scale: filter = 'iris-mid'
-
 def normalize_click(x, y, img_w, img_h):
     return [(x - img_w / 2) / img_w, (y - img_h / 2) / img_h]
 
@@ -85,7 +82,7 @@ def process_images(image_dir):
     index  = 0
     images = []
     filters = []
-
+    eyes = []
     random.shuffle(files)
     for filename in files:
         if filename.lower().endswith((".png")):
@@ -95,6 +92,14 @@ def process_images(image_dir):
             json_path = os.path.splitext(img_path)[0] + ".json"
             #exists    = os.path.exists(json_path)
             #if not exists and (filter != is_not): continue
+            eye_left  = None
+            eye_right = None
+            if is_scale:
+                eye_left  = get_annot(img_path, 'eye-left',  False)
+                eye_right = get_annot(img_path, 'eye-right', False)
+                if not eye_left or not eye_right:
+                    continue
+            
             filter_data = get_annot(img_path, filter, True) # useful feature to check all cameras; this lets us get all annotations for the pairs
             if filter and ((not filter_data) != is_not):
                 print(f'skipping, has annotation for {filter}')
@@ -104,6 +109,7 @@ def process_images(image_dir):
                 continue
             images.append(img_path)
             filters.append(filter_data)
+            eyes.append([eye_right, eye_left])
     
     while index < len(images):
         img_path  = images[index]
@@ -131,10 +137,11 @@ def process_images(image_dir):
             if is_scale:
                 # Draw the orbiting circle
                 # filter_data <-- is filled out 
-                iris_mid = filters[index]
-                assert iris_mid, "missing iris-mid data (required for plotting target depth)"
-                x = start_x + int(img_w / 2 + iris_mid[0] * img_w)
-                y = start_y + int(img_h / 2 + iris_mid[1] * img_h)
+                rl = eyes[index]
+                assert rl, "missing eyes data (required for plotting target depth)"
+                center = [(rl[0][0] + rl[1][0]) / 2, (rl[0][1] + rl[1][1]) / 2]
+                x = start_x + int(img_w / 2 + center[0] * img_w)
+                y = start_y + int(img_h / 2 + center[1] * img_h)
                 r = int(math.sqrt((mouse_x - x) ** 2 + (mouse_y - y) ** 2)) // 2
                 global scale_save
                 scale_save = r / img_w * 2

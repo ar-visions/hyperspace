@@ -174,7 +174,7 @@ def channels(images):
 
 def run_base(image, iris_mid, scale):
     if iris_mid and scale:
-        return iris_mid, scale
+        return iris_mid, scale[0]
     input_shape = base_model.input_shape  # (None, height, width, channels)
     input_height, input_width = input_shape[1:3]
     final_input = cv2.resize(image, (input_width, input_height), interpolation=cv2.INTER_AREA)
@@ -301,6 +301,14 @@ class model(keras.utils.Sequence):
 def export_part(mode, layer, part, index):
     w = layer.get_weights()
     weights_id = f"{mode}_{layer.name}_{part}"
+    weight_array = w[index]
+    shape = weight_array.shape
+    n_dims = len(shape)
+
+    # Prepare binary shape information
+    shape_header = (np.array([n_dims], dtype=np.int32).tobytes() + 
+                    np.array(shape, dtype=np.int64).tobytes())
+
     # check for quantized weights (int8)
     if hasattr(layer, 'quantize_config'):
         # Extract scale and zero-point from quantized layers
@@ -310,17 +318,16 @@ def export_part(mode, layer, part, index):
         else:
             scale = 1.0
             zero_point = 0
-        # extract scale and zero-point from quantized layers
-        #scale      = layer.get_quantize_params().get("scale",      1.0)  # Default to 1.0 if missing
-        #zero_point = layer.get_quantize_params().get("zero_point", 0)    # Default to 0
-        with open('%s.i8' % weights_id, 'wb') as f:
+        with open('res/models/%s.i8' % weights_id, 'wb') as f:
+            f.write(shape_header)
             np.array(scale, dtype=np.float32).tofile(f)      # Store scale
             np.array(zero_point, dtype=np.float32).tofile(f) # Store zero-point
-            w[index].astype(np.int8).tofile(f)               # Store quantized weights
+            weight_array.astype(np.int8).tofile(f)               # Store quantized weights
     else:
         # default float weight export
-        with open('%s.f32' % weights_id, 'wb') as f:
-            w[index].tofile(f)
+        with open('res/models/%s.f32' % weights_id, 'wb') as f:
+            f.write(shape_header)
+            weight_array.tofile(f)
 
     return weights_id
 
@@ -328,6 +335,7 @@ def export_json(model, mode, output_json_path, input_shapes):
     #return
     layers_dict = OrderedDict()
     output_shapes = {}
+    
     # Function to get layer type
     def get_layer_type(layer):
         layer_class = layer.__class__.__name__
@@ -383,13 +391,13 @@ def export_json(model, mode, output_json_path, input_shapes):
         if   layer_class == 'InputLayer':
             layers_dict[layer.name].update({
                 "Type":         "input",
-                "input":        input_shapes
+                "tensor":       input_shapes
             })
         elif layer_class == 'Conv2D':
             layers_dict[layer.name].update({
                 "Type":         "conv",
                 "inputs":        [],
-                "tensor":        [ishape] if ishape is not None else [],
+                "tensor":        ishape if ishape is not None else [],
                 "in_channels":  idim,
                 "out_channels": layer.filters,
                 "kernel_size":  list(layer.kernel_size),
@@ -403,7 +411,7 @@ def export_json(model, mode, output_json_path, input_shapes):
             layers_dict[layer.name].update({
                 "Type":         "depthwise_conv",
                 "inputs":        [],
-                "tensor":        [ishape] if ishape is not None else [],
+                "tensor":        ishape if ishape is not None else [],
                 "in_channels":   idim,
                 "depth_multiplier": layer.depth_multiplier,  # How many filters per input channel
                 "out_channels":  idim * layer.depth_multiplier,  # Depthwise convolutions keep input channels
@@ -418,7 +426,7 @@ def export_json(model, mode, output_json_path, input_shapes):
             layers_dict[layer.name].update({
                 "Type":         "pool",
                 "inputs":        [],
-                "tensor":        [ishape] if ishape is not None else [],
+                "tensor":        ishape if ishape is not None else [],
                 "type":         "max",
                 "pool_size":    list(layer.pool_size),
                 "strides":      list(layer.strides)
@@ -427,7 +435,7 @@ def export_json(model, mode, output_json_path, input_shapes):
             layers_dict[layer.name].update({
                 "Type":         "dense",
                 "inputs":        [],
-                "tensor":        [ishape] if ishape is not None else [],
+                "tensor":        [1, ishape[0]],
                 "input_dim":    idim,
                 "output_dim":   layer.units,
                 "activation":   layer.activation.__name__,
@@ -438,21 +446,21 @@ def export_json(model, mode, output_json_path, input_shapes):
             layers_dict[layer.name].update({
                 "Type":         "concatenate",
                 "inputs":        [],
-                "tensor":        [ishape] if ishape is not None else [],
+                "tensor":        ishape if ishape is not None else [],
                 "axis":         layer.axis
             })
         elif layer_class == 'ReLU':
             layers_dict[layer.name].update({
                 "Type":         "relu",
                 "inputs":        [],
-                "tensor":        [ishape] if ishape is not None else [],
+                "tensor":        ishape if ishape is not None else [],
                 "threshold":    layer.threshold
             })
         elif layer_class == 'Flatten':
             layers_dict[layer.name].update({
                 "Type":         "flatten",
                 "inputs":        [],
-                "tensor":        [ishape] if ishape is not None else []
+                "tensor":        ishape if ishape is not None else []
             })
         else:
             print(f'ai: implement layer_class: {layer_class}')
@@ -485,20 +493,24 @@ def export_json(model, mode, output_json_path, input_shapes):
     # Identify terminal nodes (layers that do not output to any others)
     remaining_nodes = [layer for layer in layers_dict if not output_connections[layer]]
 
+    # Ensure we only use the last computational layer
+    valid_output_nodes = [node for node in remaining_nodes if "dense" in node or "conv" in node]
+    assert len(valid_output_nodes), "Error: No valid terminal output nodes detected!"
+    output_tensor = output_shapes[valid_output_nodes[-1]]  # ✅ Only take the last dense or conv layer
     assert len(remaining_nodes), "Error: No terminal output nodes detected!"
-    output_tensor = output_shapes[remaining_nodes[-1]]  # ✅ Only take the last layer's shape
-    assert len(remaining_nodes), "endless loop"
 
+    if len(output_tensor) == 1:
+        output_tensor = [1, output_tensor[0]]
     layers_dict["output"] = {
         "name":         "output",
         "Type":         "output",
-        "inputs":       remaining_nodes,
+        "inputs":       [valid_output_nodes[-1]],
         "tensor":       output_tensor
     }
     ops        = list(layers_dict.values())
     model_json = {
         "ident":            mode,
-        "output":           [[2]],
+        "output":           output_tensor,
         "ops":              ops
     }
 
@@ -543,6 +555,8 @@ def train(train, val, final, lr, epochs):
                     inputs[name] = data[name]
                 if not input_shape:
                     input_shape = [inputs[name].shape[1:] for name in f_train.inputs]
+                    if len(f_train.inputs) == 1:
+                        input_shape = input_shape[0]
                 
                 outputs = model(inputs, training=True)
 

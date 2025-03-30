@@ -21,6 +21,7 @@ import argparse
 from   collections import OrderedDict
 from   keras.constraints import Constraint
 import keras.backend as K
+from tensorflow.keras.models import Model
 
 # ------------------------------------------------------------------
 # hyper-parameters and mode selection
@@ -44,13 +45,28 @@ learning_rate = float(args.learning_rate)
 num_epochs    = int(args.epochs)
 mode          = args.mode
 
+
+# test layers, this sums the result so we may check against our own implementation
+image_path = 'res/images/resized.png'
+image = cv2.imread(image_path, cv2.IMREAD_GRAYSCALE)
+model = tf.keras.models.load_model('res/models/vision_simple.keras') 
+image = image.astype(np.float32) / 255.0
+image = np.expand_dims(image, axis=[0, -1])  # Shape: (1, 32, 32, 1)
+output = model(image, training=False).numpy()
+
+# Print output
+print("vision simple:", output)
+test2 = 2
+
+
 def required_fields(mode):
-    if mode == 'base':    return ['iris_mid', 'scale']
-    if mode == 'target':  return ['iris_mid', 'scale']
+    if mode == 'simple':  return ['eye_left', 'eye_right', 'scale']
+    if mode == 'base':    return ['eye_left', 'eye_right', 'scale']
+    if mode == 'target':  return ['eye_left', 'eye_right', 'scale']
     if mode == 'eyes':    return ['eye_left', 'eye_right']
     if mode == 'track':   return ['center', 'offset'] # we need only our truth labeling from the recorder
     if mode == 'refine':  return ['iris_mid']
-    return ['iris_mid']
+    return ['eye_left', 'eye_right']
 
 # scale is tedious to plot, so we train based on a variance of images to get this number
 # this scale is fed into target training and should likely be used in track as well
@@ -83,26 +99,54 @@ class base(vision.model):
                 t[0] = -t[0]  # Flip x-coordinate
         image   = cv2.resize(image, (input_size, input_size))
         image   = image / 255.0
-        """
-        # output the training data
-        plt.figure(figsize=(8, 8))
-        plt.imshow(image2, cmap='gray')
-        # Convert iris_mid coordinates (-0.5 to 0.5 range) to image pixel coordinates
-        h, w = image2.shape
-        pixel_x = int((targets[0][0] + 0.5) * w)
-        pixel_y = int((targets[0][1] + 0.5) * h)
-        plt.scatter(pixel_x, pixel_y, c='cyan', s=100, marker='x')
-        plt.title(f"Iris Midpoint: ({targets[0][0]:.2f}, {targets[0][1]:.2f})")
-        plt.axhline(y=pixel_y, color='r', linestyle='--', alpha=0.5)
-        plt.axvline(x=pixel_x, color='r', linestyle='--', alpha=0.5)
-        # Draw a circle with radius scale[0] / 2
-        radius = (scale[0] / 2) * w  # Convert normalized scale to pixels
-        circle = plt.Circle((pixel_x, pixel_y), radius, color='cyan', fill=False, linewidth=2)
-        # Add circle to plot
-        plt.gca().add_patch(circle)
-        plt.show(block=True)
-        """
+        image   = brightness_contrast(image, random.uniform(0.5, 1.5), random.uniform(-0.15, 0.15)) if data.train else image
+        image = np.expand_dims(image, axis=-1)
+        return {'image': image }, [targets[0][0], targets[0][1], scale[0]]
+    
+    def model(self):
+        image = keras.layers.Input(shape=(input_size, input_size, 1), name='image')
+        x = keras.layers.Conv2D       (name='conv0', filters=32, activation='relu', strides=(1,1), kernel_size=3, padding="valid")(image)
+        x = keras.layers.MaxPooling2D (name='pool0', pool_size=(2,2))(x)
+        x = keras.layers.Conv2D       (name='conv1', filters=64, activation='relu', strides=(1,1), kernel_size=3, padding="valid")(x)
+        x = keras.layers.MaxPooling2D (name='pool1', pool_size=(2,2))(x)
+        x = keras.layers.Flatten      (name='flatten')(x)
+        x = keras.layers.Dense        (name='dense0', units=8, activation='relu')(x)
+        x = keras.layers.Dense        (name='dense1', units=3, activation='linear')(x)
+        return keras.Model            (name=mode, inputs=image, outputs=x)
 
+
+# scale is tedious to plot, so we train based on a variance of images to get this number
+# this scale is fed into target training and should likely be used in track as well
+class simple(vision.model):
+    def __init__(self, data, batch_size):
+        self.mode          = 'base'
+        self.data          = data
+        self.batch_size    = batch_size
+
+    # make sure teh annotator can help us fill in annotations for images that have annotations on other camera ids.
+    # thats a simple text replacement and check filter
+    def label(self, data, i):
+        # this model is 1 image at a time, but our batching is setup for the model of all camera annotations
+        # so its easiest to set a repeat count of > 4 and perform a random selection
+        image_path =  data.f2_image     [i]
+        iris_mid   =  data.f2_iris_mid  [i].copy()
+        scale      = [data.f2_scale     [i].copy()[0]]
+
+        if random.random() < 0.5:
+            image_path = data.f6_image     [i]
+            iris_mid   = data.f6_iris_mid  [i].copy()
+            scale      = [data.f6_scale     [i].copy()[0]]
+        
+        image   = cv2.imread(image_path, cv2.IMREAD_GRAYSCALE)
+        targets = [iris_mid]
+        #image2  = image.copy()
+        if random.random() < 0.5:
+            image = cv2.flip(image, 1)
+            for t in targets:
+                t[0] = -t[0]  # Flip x-coordinate
+        image   = cv2.resize(image, (input_size, input_size))
+        image   = image / 255.0
+        image   = brightness_contrast(image, random.uniform(0.5, 1.5), random.uniform(-0.15, 0.15)) if data.train else image
         image = np.expand_dims(image, axis=-1)
         return {'image': image }, [targets[0][0], targets[0][1], scale[0]]
     
@@ -110,12 +154,10 @@ class base(vision.model):
         image = keras.layers.Input(shape=(input_size, input_size, 1), name='image')
         x = keras.layers.Conv2D       (name='conv0', filters=32, activation='relu', strides=(1,1), kernel_size=3, padding="same")(image)
         x = keras.layers.MaxPooling2D (name='pool0', pool_size=(2,2))(x)
-        x = keras.layers.Conv2D       (name='conv1', filters=64, activation='relu', strides=(1,1), kernel_size=3, padding="same")(x)
-        x = keras.layers.MaxPooling2D (name='pool1', pool_size=(2,2))(x)
         x = keras.layers.Flatten      (name='flatten')(x)
-        x = keras.layers.Dense        (name='dense0', units=8, activation='relu')(x)
-        x = keras.layers.Dense        (name='dense1', units=3, activation='tanh')(x)
+        x = keras.layers.Dense        (name='dense0', units=3, activation='linear')(x)
         return keras.Model            (name=mode, inputs=image, outputs=x)
+
 
 # annotator could let the user use hte wsad keys and space, to move eye positions to correct spots
 # this way we could pre-annotate the image and the user may adjust the plots
@@ -262,7 +304,7 @@ class eyes(target):
         image       = np.expand_dims(image, axis=-1)
         i1          = 2 if mirror else 1
         i2          = 1 if mirror else 2
-        #vision.show(image_full, [targets[i1]], 'eyes: right')
+        #vision.show(image_full, [targets[i1], targets[i2]], 'eye')
         return {'image': image }, np.array([
             targets[i1][0], targets[i1][1],
             targets[i2][0], targets[i2][1],
@@ -367,8 +409,8 @@ class track(base):
         f6_left,  _, f6_left_scale,  _ = process_image(f6_image_path, f6_scale, 3.0, [f6_eye_left ])
         f6_right, _, f6_right_scale, _ = process_image(f6_image_path, f6_scale, 3.0, [f6_eye_right])
 
-        alpha    = random.uniform( 0.8, 1.2)
-        beta     = random.uniform(-0.2, 0.2)
+        alpha    = 1.0 # random.uniform( 0.8, 1.2)
+        beta     = 0.0 # random.uniform(-0.2, 0.2)
         t        = data.train
         #t = True
         f2_image = brightness_contrast(f2_image, alpha, beta)                   if t else f2_image
@@ -388,7 +430,6 @@ class track(base):
         
         if True or random.random() > 0.5:
             channels = vision.channels([f2_image, f6_image, f2_left, f6_left, f2_right, f6_right])
-
             #concatenated_image = np.hstack([channels[:, :, i] for i in range(6)])
             # Display the concatenated image
             #plt.figure(figsize=(15, 5))
@@ -396,7 +437,6 @@ class track(base):
             #plt.title("Stacked Image Channels")
             #plt.axis('off')
             #plt.show(block=True)
-
             return {
                 'channels':     channels,
                 'f2_eye_left':  aug_position(f2_eye_left,  rx * f2_image_aug_scale,  ry * f2_image_aug_scale), # we are looking at the user, the user looks at the screen, should the x direction be swapped when translating in image space vs gaze to screen space?

@@ -1,0 +1,105 @@
+{
+    "ident": "simple",
+    "output": [
+        1,
+        3
+    ],
+    "ops": [
+        {
+            "name": "image",
+            "Type": "input",
+            "tensor": [
+                32,
+                32,
+                1
+            ],
+            "inputs": []
+        },
+        {
+            "name": "conv0",
+            "Type": "conv",
+            "inputs": [
+                "image"
+            ],
+            "tensor": [
+                32,
+                32,
+                1
+            ],
+            "in_channels": 1,
+            "out_channels": 32,
+            "kernel_size": [
+                3,
+                3
+            ],
+            "strides": [
+                1,
+                1
+            ],
+            "padding": "same",
+            "activation": "relu",
+            "weights": "simple_conv0_weights",
+            "bias": "simple_conv0_bias"
+        },
+        {
+            "name": "pool0",
+            "Type": "pool",
+            "inputs": [
+                "conv0"
+            ],
+            "tensor": [
+                32,
+                32,
+                32
+            ],
+            "type": "max",
+            "pool_size": [
+                2,
+                2
+            ],
+            "strides": [
+                2,
+                2
+            ]
+        },
+        {
+            "name": "flatten",
+            "Type": "flatten",
+            "inputs": [
+                "pool0"
+            ],
+            "tensor": [
+                16,
+                16,
+                32
+            ]
+        },
+        {
+            "name": "dense0",
+            "Type": "dense",
+            "inputs": [
+                "flatten"
+            ],
+            "tensor": [
+                1,
+                8192
+            ],
+            "input_dim": 8192,
+            "output_dim": 3,
+            "activation": "linear",
+            "weights": "simple_dense0_weights",
+            "bias": "simple_dense0_bias"
+        },
+        {
+            "name": "output",
+            "Type": "output",
+            "inputs": [
+                "dense0"
+            ],
+            "tensor": [
+                1,
+                3
+            ]
+        }
+    ]
+}

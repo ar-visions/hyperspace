@@ -1,0 +1,168 @@
+{
+    "ident": "base",
+    "output": [
+        1,
+        3
+    ],
+    "ops": [
+        {
+            "name": "image",
+            "Type": "input",
+            "tensor": [
+                32,
+                32,
+                1
+            ],
+            "inputs": []
+        },
+        {
+            "name": "conv0",
+            "Type": "conv",
+            "inputs": [
+                "image"
+            ],
+            "tensor": [
+                32,
+                32,
+                1
+            ],
+            "in_channels": 1,
+            "out_channels": 32,
+            "kernel_size": [
+                3,
+                3
+            ],
+            "strides": [
+                1,
+                1
+            ],
+            "padding": "valid",
+            "activation": "relu",
+            "weights": "base_conv0_weights",
+            "bias": "base_conv0_bias"
+        },
+        {
+            "name": "pool0",
+            "Type": "pool",
+            "inputs": [
+                "conv0"
+            ],
+            "tensor": [
+                30,
+                30,
+                32
+            ],
+            "type": "max",
+            "pool_size": [
+                2,
+                2
+            ],
+            "strides": [
+                2,
+                2
+            ]
+        },
+        {
+            "name": "conv1",
+            "Type": "conv",
+            "inputs": [
+                "pool0"
+            ],
+            "tensor": [
+                15,
+                15,
+                32
+            ],
+            "in_channels": 32,
+            "out_channels": 64,
+            "kernel_size": [
+                3,
+                3
+            ],
+            "strides": [
+                1,
+                1
+            ],
+            "padding": "valid",
+            "activation": "relu",
+            "weights": "base_conv1_weights",
+            "bias": "base_conv1_bias"
+        },
+        {
+            "name": "pool1",
+            "Type": "pool",
+            "inputs": [
+                "conv1"
+            ],
+            "tensor": [
+                13,
+                13,
+                64
+            ],
+            "type": "max",
+            "pool_size": [
+                2,
+                2
+            ],
+            "strides": [
+                2,
+                2
+            ]
+        },
+        {
+            "name": "flatten",
+            "Type": "flatten",
+            "inputs": [
+                "pool1"
+            ],
+            "tensor": [
+                6,
+                6,
+                64
+            ]
+        },
+        {
+            "name": "dense0",
+            "Type": "dense",
+            "inputs": [
+                "flatten"
+            ],
+            "tensor": [
+                1,
+                2304
+            ],
+            "input_dim": 2304,
+            "output_dim": 8,
+            "activation": "relu",
+            "weights": "base_dense0_weights",
+            "bias": "base_dense0_bias"
+        },
+        {
+            "name": "dense1",
+            "Type": "dense",
+            "inputs": [
+                "dense0"
+            ],
+            "tensor": [
+                1,
+                8
+            ],
+            "input_dim": 8,
+            "output_dim": 3,
+            "activation": "linear",
+            "weights": "base_dense1_weights",
+            "bias": "base_dense1_bias"
+        },
+        {
+            "name": "output",
+            "Type": "output",
+            "inputs": [
+                "dense1"
+            ],
+            "tensor": [
+                1,
+                3
+            ]
+        }
+    ]
+}
