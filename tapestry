@@ -3,7 +3,7 @@ import:
 	trinity	https://github.com/ar-visions/trinity	main
 	ai		https://github.com/ar-visions/ai		main
 
-link:
+app:
 	A ai trinity
 	linux:
 		asound
