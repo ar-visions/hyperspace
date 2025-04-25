@@ -1,267 +1,326 @@
-#!/usr/bin/env python3
-# pip install torch torchvision opencv-python numpy requests pillow
-# ----------------------------------------------------------
-import  cv2
-import  os
-import  numpy as np
-import  requests
-import  random
-import  string
-import  time
-from    io          import BytesIO
-from    PIL         import Image
-from    tkinter     import Tk
-from    playsound   import playsound
-import  argparse
-import  sounddevice as sd
+import cv2
+import os
+import numpy as np
+import random
+import string
+import time
+from PIL import Image, ImageTk
+import argparse
+import sounddevice as sd
+import tkinter as tk
+import subprocess
+import datetime
+import signal
+import atexit
 
-# record single plot in animation!
-# this makes far more sense
-# we will need 100,000 images for this
-
+# --- audio setup ---
 mic_level = 0
-
 def audio_callback(indata, frames, time, status):
-    if status:
-        print(status, flush=True)
-    rms = np.sqrt(np.mean(np.square(indata)))
     global mic_level
-    mic_level = min(1.0, rms * 10)  # Scale it to 0 - 1
+    rms = np.sqrt(np.mean(np.square(indata)))
+    mic_level = min(1.0, rms * 10)
 
+# --- screen size ---
 def get_screen_resolution():
-    root          = Tk()
-    screen_width  = root.winfo_screenwidth()
-    screen_height = root.winfo_screenheight()
+    root = tk.Tk()
+    width, height = root.winfo_screenwidth(), root.winfo_screenheight()
     root.destroy()
-    return screen_width, screen_height
+    return width, height
 
-parser = argparse.ArgumentParser(description="Annotate images with click-based labels.")
-parser.add_argument("-s", "--session",     required=True, help="session data (name of session; as named in cwd/sessions dir)")
-parser.add_argument("-f", "--debug",       action="store_true", help="debug mode (cannot record)")
+# --- args ---
+parser = argparse.ArgumentParser(description="Hyperspace Vision Recorder")
+parser.add_argument("-s", "--session", required=True, help="session name")
+parser.add_argument("-f", "--movie", action="store_true", help="movie preview mode")
+args = parser.parse_args()
 
-args   = parser.parse_args()
-debug        = args.debug
+movie_mode = args.movie
+session = args.session
 screen_width, screen_height = get_screen_resolution()
-# logitech brio is a good device, /dev/video6
+
+# --- config ---
 camera_width, camera_height = 340, 340
-title        = "hyperspace:record"
-frame_count  = 0
-pip_scale    = 0.5  # Scale the PiP window to 10% of the background
-pip_pad      = 0.5
+pip_scale = 0.5
 pip_width, pip_height = int(camera_width * pip_scale), int(camera_height * pip_scale)
-pip_x, pip_y = screen_width - pip_width - int(camera_width * pip_pad), screen_height - pip_height - int(camera_width * pip_pad)  # Bottom-right with padding
-session      = args.session
+pip_pad = 10
 
-def random_bg_color():
-    g = 32 # random.randint(0, 64)
-    return np.full((screen_height, screen_width), g, dtype=np.uint8)
+# Screen capture config for 720p in lower right
+capture_width, capture_height = 1280, 720
+# Position in lower right
+capture_x = screen_width - capture_width
+capture_y = screen_height - capture_height
 
-def generate_hash_id():
-    return ''.join(random.choices(string.ascii_lowercase, k=6))
+window_width = pip_width
+window_height = pip_height * 2 if movie_mode else screen_width
+window_title = "hyperspace:record"
 
+# --- prepare session folder ---
 os.makedirs(f'sessions/{session}', exist_ok=True)
 
-# monitor microphone levels
-sample_rate = 44100  # standard audio sample rate (Hz)
-block_size  = 2048   # number of frames per block
-stream      = sd.InputStream(callback=audio_callback, 
-                        channels=1,
-                        samplerate=sample_rate,
-                        blocksize=block_size)
-stream.start()  # Start listening to the microphone
+# --- FFmpeg Screen Recording ---
+ffmpeg_process = None
 
-if not debug:
-    cv2.namedWindow      (title, cv2.WND_PROP_FULLSCREEN)
-    cv2.setWindowProperty(title, cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
-background = random_bg_color()
-cv2.imshow(title, background)
+def start_recording():
+    global ffmpeg_process
+    
+    # Check if already recording
+    if ffmpeg_process is not None:
+        return
+    
+    # Create timestamp for filename
+    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    output_file = f"sessions/{session}/screen_{timestamp}.mp4"
+    
+    # Build ffmpeg command
+    ffmpeg_cmd = [
+        "ffmpeg",
+        "-f", "x11grab",           # Screen capture input format
+        "-framerate", "15",        # Lower frame rate for better performance
+        "-video_size", f"{capture_width}x{capture_height}",  # Size of the capture area
+        "-i", f":0.0+{capture_x},{capture_y}",  # Display and offset
+        "-f", "pulse",             # Audio input format (Linux pulse audio)
+        "-i", "default",           # Default audio device
+        "-c:v", "libx264",         # Video codec
+        "-preset", "ultrafast",    # Fastest encoding preset
+        "-pix_fmt", "yuv420p",     # Required pixel format for compatibility
+        "-c:a", "aac",             # Audio codec
+        "-strict", "experimental", # Allow experimental codecs
+        "-b:a", "128k",            # Audio bitrate
+        "-y",                      # Overwrite output files without asking
+        output_file
+    ]
+    
+    # Start ffmpeg process
+    ffmpeg_process = subprocess.Popen(
+        ffmpeg_cmd,
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE
+    )
+    
+    print(f"Started recording to {output_file}")
+    return output_file
 
-# rectangle: head here (center of rotation = your eye median); not the lower middle of your brain (who even knows where this is)
-# circle: look at this
+def stop_recording():
+    global ffmpeg_process
+    
+    if ffmpeg_process is None:
+        return
+    
+    # Gracefully terminate ffmpeg with 'q' command
+    try:
+        ffmpeg_process.communicate(input=b'q', timeout=5)
+    except subprocess.TimeoutExpired:
+        # If it doesn't respond to 'q', try to terminate it
+        ffmpeg_process.terminate()
+        try:
+            ffmpeg_process.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            # If it still doesn't terminate, kill it
+            ffmpeg_process.kill()
+    
+    ffmpeg_process = None
+    print("Recording stopped")
 
-zone      = 3
-zone_cm   = [ 10, 30, 50 ]
-z_max     = 50
-eye_x     = -1
-eye_y     = -1
-pcount    = 4
-pindex    = 0
-key       = 0
-eyes_only = True
+# Ensure ffmpeg is stopped when program exits
+atexit.register(stop_recording)
 
-class cam:
+# --- audio stream (just for meter, not for recording) ---
+sample_rate = 44100
+stream = sd.InputStream(callback=audio_callback, channels=1, samplerate=sample_rate, blocksize=2048)
+stream.start()
+
+# --- camera class ---
+class Cam:
     def __init__(self, device_id):
-        self.device_id = device_id
-        self.cap = None
         self.images = []
         self.bright = []
-        self.cap = cv2.VideoCapture(self.device_id)
-        self.cap.set(cv2.CAP_PROP_FRAME_WIDTH,  camera_width)
+        self.cap = cv2.VideoCapture(device_id)
+        self.device_id = device_id  # Store device_id for error messages
+        self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, camera_width)
         self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, camera_height)
-
-        # Disable all automatic adjustments
-        self.cap.set(cv2.CAP_PROP_AUTO_EXPOSURE, 0.0)  # 0.25 is manual mode (OFF)
-        self.cap.set(cv2.CAP_PROP_AUTOFOCUS, 0)        # Disable autofocus
-        self.cap.set(cv2.CAP_PROP_AUTO_WB, 0)          # Disable auto white balance
-        self.cap.set(cv2.CAP_PROP_BRIGHTNESS, 0)       # Set fixed brightness
-        self.cap.set(cv2.CAP_PROP_CONTRAST, 0)        # Set fixed contrast
-        self.cap.set(cv2.CAP_PROP_GAIN, 0)             # Set manual gain
-        
-        # Set exposure if provided
-        #self.cap.set(cv2.CAP_PROP_EXPOSURE, 0.1)
-        
         if not self.cap.isOpened():
-            print(f"error: could not open (camera {self.device_id})")
-            exit(2)
-
+            raise Exception(f"could not open camera {device_id}")
+    
     def read(self):
-        # capture frame from webcam, and select the best and brightest
         ret, frame = self.cap.read()
         if not ret:
             print(f"error: could not read frame (camera {self.device_id})")
             exit(2)
+        
         gray_image = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
         current_brightness = np.mean(gray_image)
+
+        # keep last 2 images
         self.images.insert(0, gray_image)
         self.bright.insert(0, current_brightness)
         if len(self.images) > 2:
             self.images.pop()
             self.bright.pop()
-        best_bright = current_brightness
-        selected = gray_image
-        index = 0
-        for b_value in self.bright:
-            if b_value > best_bright:
-                selected = self.images[index]
-                best_bright = b_value
-            index += 1
 
-        # display reduced frame; not large enough to cause too much noise
+        # select brightest image
+        best_index = np.argmax(self.bright)
+        selected = self.images[best_index]
+
+        # scale selected to pip size
         pip_frame = cv2.resize(selected, (pip_width, pip_height))
         return selected, pip_frame
 
-cam2      = cam(2) # top
-cam6      = cam(6) # bottom (stOP!.... bottom one!)
-                   # i need glue for this bottom one; or call-upon someone to help me mount it properly.
-selected  = False
-selected2 = None
-selected6 = None
+# --- cameras ---
+cam2 = Cam(2)
+cam6 = Cam(6)
 
-##
-# we want all of this in C with a variable set of cameras that the user must bind;
-# not so hard to have a thumbnail and a option for each
-#
-# any overwriting camera would null any users duplicating it; thats better than toggling other off to make the other visible
-# no confirmation dialogs or anything silly. trinity needs in it.  theres no way im making that separate from trinity
-# trinity = UX (father, quantum membrane descriptor language to outter event horizon), 
-#           3D (son,    the physical realm, continuously encoding new entanglements in timescapes),
-#           AR (spirit; voice, and body -- something to visualize more dimensions of data and move with us on 
-#                       corrective-counter-planar projection)
-# 
-##
-
-interval    = 4
-recording   = False
-last_space  = 0
-center_x    = random.randint(0, screen_width)
-center_y    = random.randint(0, screen_height)
-offset_iter = 0
-offset_x    = 0
-offset_y    = 0
-eye_x          = 0
-eye_y          = 0
-
-
-def update_center_offset():
-    global center_x, center_y
-    global offset_x, offset_y
-    global offset_iter
-    offset_iter += 1
-    if offset_iter > 8:
-        center_x    = random.randint(0,   screen_width)
-        center_y    = random.randint(0,   screen_height)
-        offset_iter = 0
-    offset_x = random.randint(-screen_width  // 4, +screen_width // 4) # distribute in a 16:9 uniform
-    offset_y = random.randint(-screen_height // 4, +screen_height // 4)
+# --- UI ---
+if movie_mode:
+    root = tk.Tk()
     
-    # lets not prefer the edges, this will bias our accuracy to the bottom of the screen
-    for i in range(8):
-        if center_x + offset_x < 0 or center_x + offset_x > screen_width:
-            offset_x = random.randint(-screen_width  // 4, +screen_width // 4)
-        if center_y + offset_y < 0 or center_y + offset_y > screen_height:
-            offset_y = random.randint(-screen_height  // 4, +screen_height // 4)
+    # Remove title bar but keep window
+    root.overrideredirect(True)
     
-    # constrain offset_x to not go out of bounds
-    if center_x + offset_x < 0: offset_x = -center_x
-    if center_y + offset_y < 0: offset_y = -center_y
-    if center_x + offset_x > screen_width:  offset_x = screen_width - center_x
-    if center_y + offset_y > screen_height: offset_y = screen_height - center_y
+    # Window position variables
+    x_pos = pip_pad
+    y_pos = pip_pad
+    
+    root.geometry(f"{pip_width}x{pip_height*2}+{x_pos}+{y_pos}")
+    root.title(window_title)
+    root.attributes("-topmost", True)
+    
+    # Add a frame for the whole window (will be used for dragging)
+    frame = tk.Frame(root, bg="black")
+    frame.pack(fill=tk.BOTH, expand=True)
+    
+    # Add label for displaying images
+    label = tk.Label(frame)
+    label.pack(fill=tk.BOTH, expand=True)
+    
+    # Add a record button
+    def toggle_record():
+        global recording
+        recording = not recording
+        if recording:
+            start_recording()
+            record_button.config(bg="red", text="Stop")
+            print("Recording started")
+        else:
+            stop_recording()
+            record_button.config(bg="green", text="Record")
+            print("Recording stopped")
+    
+    if movie_mode:
+        record_button = tk.Button(root, text="Record", bg="green", fg="white", 
+                                command=toggle_record, 
+                                font=("Arial", 10, "bold"))
+        record_button.place(x=10, y=10, width=60, height=25)
+    
+    # Variables to track drag state
+    drag_data = {"x": 0, "y": 0, "dragging": False}
+    
+    # Function to handle window dragging
+    def on_drag_start(event):
+        drag_data["x"] = event.x
+        drag_data["y"] = event.y
+        drag_data["dragging"] = True
+    
+    def on_drag_motion(event):
+        if drag_data["dragging"]:
+            # Calculate the distance moved
+            dx = event.x - drag_data["x"]
+            dy = event.y - drag_data["y"]
+            
+            # Get the current position of the window
+            x = root.winfo_x() + dx
+            y = root.winfo_y() + dy
+            
+            # Move the window
+            root.geometry(f"+{x}+{y}")
+    
+    def on_drag_release(event):
+        drag_data["dragging"] = False
+    
+    # Bind the frame to mouse events for dragging
+    frame.bind("<ButtonPress-1>", on_drag_start)
+    frame.bind("<B1-Motion>", on_drag_motion)
+    frame.bind("<ButtonRelease-1>", on_drag_release)
+    
+    # Bind the label to mouse events for dragging
+    label.bind("<ButtonPress-1>", on_drag_start)
+    label.bind("<B1-Motion>", on_drag_motion)
+    label.bind("<ButtonRelease-1>", on_drag_release)
+    
+else:
+    cv2.namedWindow(window_title, cv2.WND_PROP_FULLSCREEN)
+    cv2.setWindowProperty(window_title, cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
 
-update_center_offset()
-
-def write(id, image):
-    cen_x = center_x / screen_width
-    cen_y = center_y / screen_height
-    off_x = offset_x / screen_width
-    off_y = offset_y / screen_height
-    filename = f"sessions/{session}/f{id}_{session}-{frame_count:04d}_{cen_x + off_x:.4f}_{cen_y + off_y:.4f}.png"
-    cv2.imwrite(filename, image, [cv2.IMWRITE_PNG_COMPRESSION, 9])
-    json = filename.replace(".png", ".json")
+# --- helper functions ---
+def save_frame(id, img, cx, cy, ox, oy):
+    fname = f"sessions/{session}/f{id}_{session}-{frame_count:04d}_{cx+ox:.4f}_{cy+oy:.4f}.png"
+    cv2.imwrite(fname, img, [cv2.IMWRITE_PNG_COMPRESSION, 9])
+    json = fname.replace(".png", ".json")
     with open(json, 'w') as f:
-        f.write(f'{{"labels":{{"center":[{cen_x:.4f}, {cen_y:.4f}], "offset": [{off_x:.4f}, {off_y:.4f}]}}}}')
-    print(f"saved: {filename}")
+        f.write(f'{{"labels":{{"center":[{cx:.4f},{cy:.4f}],"offset":[{ox:.4f},{oy:.4f}]}}}}')
 
-# Define the orbit parameters
-orbit_radius = 200  # Distance from the main circle
-orbit_period = 5    # Time in seconds for a full orbit
-
-import threading
-
-def write_in_thread(id, data):
-    write(id, data)
+# --- main loop ---
+frame_count = 0
+recording = False
+center_x, center_y = random.randint(0,screen_width), random.randint(0,screen_height)
+offset_x, offset_y = 0, 0
 
 while True:
-    t = time.time()
+    # capture frames
+    img2, img2_pip = cam2.read()
+    img6, img6_pip = cam6.read()
 
-    # refresh background image every 3 seconds
-    if recording and frame_count % interval == 0: # we should also support audio-based capture
-        #playsound('beep.wav')
-        #write(2, selected2)
-        #write(6, selected6)
-        threading.Thread(target=write_in_thread, args=(2, selected2), daemon=True).start()
-        threading.Thread(target=write_in_thread, args=(6, selected6), daemon=True).start()
+    if movie_mode:
+        img2 = cv2.resize(img2, (pip_width, pip_height))
+        img6 = cv2.resize(img6, (pip_width, pip_height))
 
-    blended_frame = background.copy()
+        merged = np.zeros((pip_height*2, pip_width), dtype=np.uint8)
+        merged[0:pip_height, :] = img2_pip
+        merged[pip_height:pip_height*2, :] = img6_pip
 
-    # indicate which ones are selected, through here if we need
-    selected = True
+        imgtk = ImageTk.PhotoImage(image=Image.fromarray(merged))
+        label.imgtk = imgtk
+        label.configure(image=imgtk)
+        root.update()
+        
+        # For tkinter window, check for escape key
+        root.bind('<Escape>', lambda e: root.destroy())
+        
+        # Key binding removed - using button instead
+        
+    else:
+        bg = np.full((screen_height, screen_width), 32, dtype=np.uint8)
+        bg[0:pip_height, 0:pip_width] = img2_pip
+        bg[pip_height:pip_height*2, 0:pip_width] = img6_pip
+        cv2.imshow(window_title, bg)
 
-    # camera 2 (top)
-    selected2, pip_frame2 = cam2.read()
-    blended_frame[pip_y-pip_height:pip_y, pip_x:pip_x+pip_width] = pip_frame2
-    # camera 6 (bottom; ... brick, not hit back)
-    selected6, pip_frame6 = cam6.read()
-    blended_frame[pip_y:pip_y+pip_height, pip_x:pip_x+pip_width] = pip_frame6
-
-    cv2.circle(blended_frame, (center_x, center_y), 32, 160, 1)  # -1 thickness fills the circle
-    cv2.circle(blended_frame, (center_x + offset_x, center_y + offset_y), 4, 255, 1)  # -1 thickness fills the circle
-
-    cv2.imshow(title, blended_frame)
     frame_count += 1
-    
-    #print(f'mic: {mic_level}')
-    key          = cv2.waitKey(10) & 0xFF
-    current_ticks = int(time.time() * 1000)  # Current time in milliseconds
-    
-    # Handle spacebar with cooldown
-    if key == 32 and (current_ticks - last_space > 500):
-        #recording = not recording
-        last_space = current_ticks
-        if not recording:
-            write(2, selected2)
-            write(6, selected6)
-            update_center_offset()
 
-    if key == 27: break # esc
+    if not movie_mode:
+        key = cv2.waitKey(10) & 0xFF
+        if key == 27:  # Escape key
+            break
+        elif key == ord('r'):  # Press 'r' to toggle recording
+            recording = not recording
+            if recording:
+                start_recording()
+                print("Recording started")
+            else:
+                stop_recording()
+                print("Recording stopped")
+    else:
+        # Short delay to prevent CPU hogging
+        time.sleep(0.01)
+        
+        # Check if window was closed
+        try:
+            root.update()
+        except tk.TclError:
+            break
 
-cv2.destroyAllWindows()
+# Ensure recording is stopped before exit
+if recording:
+    stop_recording()
+
+if not movie_mode:
+    cv2.destroyAllWindows()
+stream.stop()
