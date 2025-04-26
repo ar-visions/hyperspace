@@ -13,6 +13,7 @@ import datetime
 import signal
 import atexit
 
+
 # --- audio setup ---
 mic_level = 0
 def audio_callback(indata, frames, time, status):
