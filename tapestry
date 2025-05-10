@@ -1,9 +1,0 @@
-import:
-	A		https://github.com/ar-visions/A			main
-	trinity	https://github.com/ar-visions/trinity	main
-	ai		https://github.com/ar-visions/ai		main
-
-app:
-	A ai trinity
-	linux:
-		asound
