@@ -13,6 +13,10 @@ import datetime
 import signal
 import atexit
 
+# simple screen casting app.
+# eventually we want the app to show off higher level features using ai along with the hyperspace sensor data.
+# that may be AI model queries with attached screenshot a 'parascope' crop of the screen along with dictation
+
 
 # --- audio setup ---
 mic_level = 0

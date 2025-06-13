@@ -56,8 +56,6 @@ output = model(image, training=False).numpy()
 
 # Print output
 print("vision simple:", output)
-test2 = 2
-
 
 def required_fields(mode):
     if mode == 'simple':  return ['eye_left', 'eye_right', 'scale']
