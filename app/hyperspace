@@ -1,4 +1,13 @@
 #ifndef _HYPERSPACE_
 #define _HYPERSPACE_
-#include <A>
+
+#define hyperspace_schema(X,Y,...) \
+    i_prop   (X,Y, public,  i32,      width) \
+    i_prop   (X,Y, public,  i32,      height) \
+    i_method  (X,Y, public, object,   background, object) \
+    i_method  (X,Y, public, map,      interface,  object) \
+    i_override(X,Y, method, init) \
+    i_override(X,Y, method, dealloc)
+declare_class_2(hyperspace, app)
+
 #endif
