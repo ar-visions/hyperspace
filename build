@@ -1,8 +1,0 @@
-import:
-	A		https://github.com/ar-visions/A			main
-	img 	https://github.com/ar-visions/img 		main
-	trinity	https://github.com/ar-visions/trinity	main
-	ai		https://github.com/ar-visions/ai		main
-		linux:
-			-lasound
-		-lai

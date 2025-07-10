@@ -49,7 +49,7 @@ object hyperspace_record_action(hyperspace a, event ev) {
 
 map    hyperspace_render(hyperspace a, window w) {
     return m(
-        "background", background(blur, false, elements, m(
+        "background", stage(blur, false, elements, m(
             "main", pane(elements, m(
                 "record", button()
             )),

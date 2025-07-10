@@ -1,0 +1,17 @@
+import A
+	url:    'https://github.com/ar-visions/A'
+	commit: 'main'
+
+import mx
+	url:    'https://github.com/ar-visions/img'
+	commit: 'main'
+	linux-link {
+		-lasound
+	}
+	link {
+		-lai
+	}
+
+import trinity
+	url:    'https://github.com/ar-visions/trinity'
+	commit: 'main'
