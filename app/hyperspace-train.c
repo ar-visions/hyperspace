@@ -39,7 +39,7 @@ tensor base_labels(map data) {
 // will be important to get a better 'dataset' prototype than what we have in python
 
 int main(int argc, symbol args[]) {
-    A_start(args);
+    startup(args);
 
     path   f      = form(path, "models/vision_base.json");
     keras  k      = read(f, typeid(keras));

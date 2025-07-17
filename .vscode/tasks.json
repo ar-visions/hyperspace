@@ -2,7 +2,7 @@
 	"version": "2.0.0",
 	"tasks": [
         {
-            "label": "build-mp4-test",
+            "label": "build-hyperspace",
             "type": "shell",
 			"options": {
                 "cwd": "${workspaceFolder}/../hyperspace/build"
@@ -19,138 +19,11 @@
             },
 			"isBackground": false,
 			"problemMatcher": ["$gcc"],
-            "windows": {
-                "command": "msbuild hyperspace.sln /t:mp4-test /p:Configuration=Debug"
-            },
             "osx": {
-                "command": "make mp4-test -j16"
+                "command": "make -j8"
             },
             "linux": {
-                "command": "make mp4-test -j16",
-                "options":{
-                    "env":{"VERBOSE":"1"}
-                }
-            }
-        },
-        {
-            "label": "build-h264-test",
-            "type": "shell",
-			"options": {
-                "cwd": "${workspaceFolder}/../hyperspace/build"
-            },
-            "group": {
-                "kind": "build",
-                "isDefault": true
-            },
-            "presentation": {
-                "reveal": "always",
-                "panel": "shared",
-                "group": "build0",
-                "clear": true
-            },
-			"isBackground": false,
-			"problemMatcher": ["$gcc"],
-            "windows": {
-                "command": "msbuild hyperspace.sln /t:h264-test /p:Configuration=Debug"
-            },
-            "osx": {
-                "command": "make h264-test -j16"
-            },
-            "linux": {
-                "command": "make h264-test -j16",
-                "options":{
-                    "env":{"VERBOSE":"1"}
-                }
-            }
-        },
-        {
-            "label": "build-annotate",
-            "type": "shell",
-			"options": {
-                "cwd": "${workspaceFolder}/../hyperspace/build"
-            },
-            "group": {
-                "kind": "build",
-                "isDefault": true
-            },
-            "presentation": {
-                "reveal": "always",
-                "panel": "shared",
-                "group": "build0",
-                "clear": true
-            },
-			"isBackground": false,
-			"problemMatcher": ["$gcc"],
-            "windows": {
-                "command": "msbuild hyperspace.sln /t:annotate /p:Configuration=Debug"
-            },
-            "osx": {
-                "command": "make annotate -j16"
-            },
-            "linux": {
-                "command": "make annotate -j16",
-                "options":{
-                    "env":{"VERBOSE":"1"}
-                }
-            }
-        },
-        {
-            "label": "build-rubiks",
-            "type": "shell",
-			"options": {
-                "cwd": "${workspaceFolder}/../hyperspace/build"
-            },
-            "group": {
-                "kind": "build",
-                "isDefault": true
-            },
-            "presentation": {
-                "reveal": "always",
-                "panel": "shared",
-                "group": "build0",
-                "clear": true
-            },
-			"isBackground": false,
-			"problemMatcher": ["$gcc"],
-            "windows": {
-                "command": "msbuild hyperspace.sln /t:rubiks"
-            },
-            "osx": {
-                "command": "make rubiks -j16"
-            },
-            "linux": {
-                "command": "make rubiks -j16",
-                "options":{
-                    "env":{"VERBOSE":"1"}
-                }
-            }
-        },
-        {
-            "label": "build-facegen",
-            "type": "shell",
-			"options": {
-                "cwd": "${workspaceFolder}/../hyperspace/build"
-            },
-            "group": {
-                "kind": "build",
-                "isDefault": true
-            },
-            "presentation": {
-                "reveal": "always",
-                "panel": "shared",
-                "group": "build0",
-                "clear": true
-            },
-			"isBackground": false,
-			"problemMatcher": ["$gcc"],
-            "windows": {
-                "command": "msbuild hyperspace.sln /t:facegen"
-            },
-            "osx": {
-                "command": "make facegen -j16"
-            },
-            "linux": {
-                "command": "make facegen -j16",
+                "command": "make -j8",
                 "options":{
                     "env":{"VERBOSE":"1"}
                 }
